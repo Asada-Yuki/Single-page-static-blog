@@ -282,6 +282,7 @@
                     <div class="stitle mb70">
                         <h2>About</h2>
                     </div>
+                    <div id="twitterapi"></div>
                     <div class="row">
                        <div class="col-md-8 col-md-offset-2">
                             <div class="row">
@@ -361,8 +362,20 @@
             <form autocomplete="off"></form>
         </main>
         <script src="js/jquery-2.1.4.min.js"></script>
+        <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
         <script src="js/plugin.js"></script>
         <script src="js/init-round.js"></script>
         <script src="js/main.js"></script>
+        <script>
+            $(document).ready(function() {
+                $.ajax({
+                    url: "https://api.twitter.com/1.1/statuses/user_timeline.json?screen_name=Asada_Yuki_Maso",
+                    type: "GET",
+                    success: function(data) {
+                        $('#twitterapi').html(data);
+                    }
+                });
+            });
+        </script>
     </body>
 </html>
