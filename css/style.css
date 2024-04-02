@@ -763,6 +763,9 @@ ul {
 }
 
 /* ====================  Contact Section=======================*/
+.contact-section{
+    background:black;
+}
 .cont-form {
     margin-top: 60px;
 }
