@@ -1,0 +1,1 @@
+# Single-page-static-blog
