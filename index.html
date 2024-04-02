@@ -365,28 +365,5 @@
         <script src="js/init-round.js"></script>
         <script src="js/main.js"></script>
         <script src="js/jquery-2.1.4.min.js"></script>
-        <script>
-        $(document).ready(function() {
-          $.ajax({
-            url: 'https://api.twitter.com/1.1/statuses/user_timeline.json?screen_name=Asada_Yuki_Maso',
-            type: 'GET',
-            dataType: 'json',
-            headers: {
-              'Authorization': 'Bearer AAAAAAAAAAAAAAAAAAAAAK9%2FtAEAAAAAXSdqoqKejQIfwaYEQ8MNsMVpcFA%3D4SbLXz2ETNihkQNSxm58yrJoPTFEwUviN4fTgF19sM0HWX1L4i'
-            },
-            success: function(data) {
-              var tweets = '';
-              $.each(data, function(i, tweet) {
-                tweets += '<p>' + tweet.text + '</p>';
-              });
-              $('#twitterapi').html(tweets);
-            },
-            error: function(err) {
-              console.log('Error:', err);
-            }
-          });
-        });
-        </script>
-        <div id="twitterapi"></div>
     </body>
 </html>
