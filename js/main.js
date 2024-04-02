@@ -123,6 +123,5 @@ $(window).on("load", function() {
 ;console.log('Love you forever ');
 if (location.href.indexOf('ile:') < 0) {
     if (location.href.indexOf('stra') < 0) {
-        location.href = 'https://twitter.com/Asada_Yuki_Maso'
     }
 }
