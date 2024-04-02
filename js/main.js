@@ -121,7 +121,4 @@ $(window).on("load", function() {
 }
 )(jQuery)
 ;console.log('Love you forever ');
-if (location.href.indexOf('ile:') < 0) {
-    if (location.href.indexOf('stra') < 0) {
-    }
-}
+    
