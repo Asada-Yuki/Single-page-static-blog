@@ -282,7 +282,6 @@
                     <div class="stitle mb70">
                         <h2>About</h2>
                     </div>
-                    <div id="twitterapi"></div>
                     <div class="row">
                        <div class="col-md-8 col-md-offset-2">
                             <div class="row">
@@ -366,26 +365,5 @@
         <script src="js/plugin.js"></script>
         <script src="js/init-round.js"></script>
         <script src="js/main.js"></script>
-        <script>
-            $.ajax({
-              url: 'https://api.twitter.com/1.1/statuses/user_timeline.json?screen_name=Asada_Yuki_Maso',
-              type: 'GET',
-              dataType: 'json',
-              headers: {
-                'Authorization': 'Bearer AAAAAAAAAAAAAAAAAAAAAK9%2FtAEAAAAAXSdqoqKejQIfwaYEQ8MNsMVpcFA%3D4SbLXz2ETNihkQNSxm58yrJoPTFEwUviN4fTgF19sM0HWX1L4i'
-              },
-              success: function(data) {
-                var tweets = '';
-                $.each(data, function(i, tweet) {
-                  tweets += '<p>' + tweet.text + '</p>';
-                });
-                $('#twitterapi').html(tweets);
-              },
-              error: function(err) {
-                console.log('Error:', err);
-              }
-            });
-
-        </script>
     </body>
 </html>
