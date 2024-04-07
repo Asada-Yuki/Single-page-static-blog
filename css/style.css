@@ -732,7 +732,7 @@ ul {
     width: 100%;
     top: 0;
     left: 0;
-    background-image: url("../img/bg.jpg");
+    background-image: url("../img/bg.webp");
     background-position: center center;
     background-attachment: fixed;
     background-repeat: no-repeat;
