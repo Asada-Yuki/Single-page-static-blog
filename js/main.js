@@ -120,17 +120,6 @@ $(window).on("load", function() {
     })*/
 }
 
-// 禁用右键菜单
-document.addEventListener('contextmenu', (e) => e.preventDefault());
-
-// 禁用文字选择
-document.addEventListener('selectstart', (e) => e.preventDefault());
-
-// 禁用 Ctrl+C / Cmd+C
-document.addEventListener('keydown', (e) => {
-  if (e.ctrlKey && e.key === 'c') e.preventDefault();
-});
-
 
 )(jQuery)
 ;console.log('Love you forever ');
