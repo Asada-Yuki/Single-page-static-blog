@@ -1,0 +1,85 @@
+/* =========================================================================
+   variables.css — 凪 — Slumber in Blue
+   Color palette, typography scale, spacing, radii, motion tokens.
+   All values are taken verbatim from the visual spec (Section 4.1 / 4.2).
+   ========================================================================= */
+
+:root {
+  /* ----- Color palette (15 roles) ----- */
+  --color-void: #060d17;            /* 1. 深渊 Deep Void — bottommost background */
+  --color-abyss: #0b1426;           /* 2. 深海 Abyss — main background */
+  --color-midnight: #11203a;        /* 3. 午夜 Midnight — section separation */
+  --color-surface: rgba(30, 58, 95, 0.35);        /* 4. 表面 Surface — glass panel base */
+  --color-surface-bright: rgba(56, 189, 248, 0.08); /* 5. 表面亮 — hover lift */
+  --color-slime-blue: #38bdf8;      /* 6. 史莱姆蓝 — primary interactive */
+  --color-gel-cyan: #67e8f9;        /* 7. 凝胶青 — gradient end / active */
+  --color-soft-glow: #bae6fd;       /* 8. 柔光 — glow / gradient start */
+  --color-love-ember: #fb7185;      /* 9. 爱之余烬 — only warm accent */
+  --color-prayer-light: #fecdd3;    /* 10. 祈祷微光 — warm lightened */
+  --color-moonlight: #e2e8f0;       /* 11. 月光白 — primary text */
+  --color-mist: #94a3b8;            /* 12. 雾蓝灰 — secondary text */
+  --color-shadow: #64748b;          /* 13. 暗影 — weak text */
+  --color-divider: rgba(148, 163, 184, 0.12);     /* 14. 分割线 */
+  --color-noise: rgba(255, 255, 255, 0.015);      /* 15. 噪声层 */
+
+  /* ----- Gradient trio (主色三联体) ----- */
+  --gradient-trio: linear-gradient(135deg, #bae6fd, #38bdf8, #67e8f9);
+
+  /* ----- Font families ----- */
+  --font-display: 'Fraunces', 'Noto Serif SC', Georgia, 'Times New Roman', serif;
+  --font-body: 'Inter', 'Noto Sans SC', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+
+  /* ----- Font sizes (1.250 Major Third) ----- */
+  --fs-display-xl: clamp(2.5rem, 6vw, 4.5rem);
+  --fs-display-l: clamp(2rem, 4vw, 3rem);
+  --fs-heading: clamp(1.5rem, 3vw, 2rem);
+  --fs-heading-zh: clamp(1.4rem, 2.5vw, 1.75rem);
+  --fs-body-l: 1.25rem;
+  --fs-body-l-zh: 1.125rem;
+  --fs-body: 1rem;
+  --fs-body-zh: 0.9375rem;
+  --fs-caption: 0.875rem;
+  --fs-caption-zh: 0.8125rem;
+  --fs-micro: 0.75rem;
+  --fs-micro-zh: 0.6875rem;
+
+  /* ----- Line heights ----- */
+  --lh-heading: 1.2;
+  --lh-body: 1.7;
+  --lh-body-zh: 1.8;
+
+  /* ----- Letter spacing ----- */
+  --ls-tight: -0.02em;
+  --ls-normal: 0;
+  --ls-wide: 0.08em;
+
+  /* ----- Layout / spacing ----- */
+  --space-section: clamp(5rem, 12vh, 9rem);
+  --container-max: 1100px;
+  --container-pad: clamp(1.25rem, 5vw, 3rem);
+
+  /* ----- Radii (min 8px, no hard corners) ----- */
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-pill: 999px;
+
+  /* ----- Glow / shadow tokens ----- */
+  --glow-avatar: 0 0 20px 4px rgba(56, 189, 248, 0.45),
+    0 0 44px 10px rgba(186, 230, 253, 0.22);
+  --glow-avatar-warm: 0 0 24px 6px rgba(251, 113, 133, 0.5),
+    0 0 52px 14px rgba(254, 205, 211, 0.25);
+  --glow-bar: 0 0 8px rgba(56, 189, 248, 0.5);
+
+  /* ----- Motion ----- */
+  --ease-soft: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --t-reveal: 0.8s;
+  --t-warm: 0.4s;
+  --t-bar: 0.9s;
+
+  /* ----- Z-index scale ----- */
+  --z-gel: 0;
+  --z-content: 1;
+  --z-noise: 9999;
+}

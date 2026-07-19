@@ -1,0 +1,403 @@
+/* =========================================================================
+   main.css — entry point.
+   Imports tokens, base, animations, components; then declares the visual-novel
+   full-screen pagination: scroll-snap scenes, a single global fixed gel
+   background (seamless across page turns), fullscreen typing layout, interest
+   bars, and page-specific layout.
+   ========================================================================= */
+
+@import './variables.css';
+@import './base.css';
+@import './animations.css';
+@import './components.css';
+
+/* ======================= SCROLL SNAP (full-page turn) ======================= */
+html {
+  scroll-snap-type: y mandatory;
+}
+
+/* ======================= SCENE BASE ======================= */
+.scene {
+  position: relative;
+  z-index: 1;
+  height: 100vh;
+  height: 100svh;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  padding: clamp(2rem, 6vh, 4rem) var(--container-pad);
+  /* Scenes are transparent so the single global .gel-bg shows through,
+     making the background continuous and seamless across page turns. */
+  background: transparent;
+}
+
+.scene-inner {
+  position: relative;
+  z-index: var(--z-content);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+  text-align: center;
+}
+
+/* ======================= GEL DRIFT BACKGROUND (动效 2 — global, fixed) ======================= */
+/* A single global .gel-bg lives outside <main> and stays fixed while pages
+   scroll-snap over it, so the drifting gel blobs never jump or reset between
+   scenes. The blobs drift continuously;翻页时背景完全连续无缝。 */
+.gel-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.gel {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  will-change: transform;
+}
+
+.gel-1 {
+  width: 480px;
+  height: 480px;
+  max-width: 62vw;
+  max-height: 62vw;
+  background: radial-gradient(circle, rgba(56, 189, 248, 0.55), transparent 70%);
+  top: -8%;
+  left: -6%;
+  opacity: 0.5;
+  /* Foreground layer — sharpest blur so the blob reads as the nearest light. */
+  filter: blur(60px);
+  animation: drift1 18s ease-in-out infinite;
+}
+
+.gel-2 {
+  width: 540px;
+  height: 540px;
+  max-width: 66vw;
+  max-height: 66vw;
+  background: radial-gradient(circle, rgba(103, 232, 249, 0.5), transparent 70%);
+  bottom: -12%;
+  right: -10%;
+  opacity: 0.45;
+  /* Mid layer — default 80px blur from .gel base. */
+  filter: blur(80px);
+  animation: drift2 20s ease-in-out infinite;
+}
+
+.gel-3 {
+  width: 380px;
+  height: 380px;
+  max-width: 56vw;
+  max-height: 56vw;
+  background: radial-gradient(circle, rgba(186, 230, 253, 0.4), transparent 70%);
+  top: 40%;
+  left: 50%;
+  opacity: 0.4;
+  /* Mid layer — default 80px blur from .gel base. */
+  filter: blur(80px);
+  animation: drift3 22s ease-in-out infinite;
+}
+
+.gel-4 {
+  width: 420px;
+  height: 420px;
+  max-width: 58vw;
+  max-height: 58vw;
+  /* Single warm anchor — love ember,极淡. One warm blob is enough; more would
+     tip the cool palette. Sits on the far layer so it never overpowers. */
+  background: radial-gradient(circle, rgba(251, 113, 133, 0.1), transparent 70%);
+  bottom: 15%;
+  right: 20%;
+  opacity: 0.5;
+  /* Far layer — heaviest blur so the warm note stays diffuse and ambient. */
+  filter: blur(120px);
+  animation: drift4 26s ease-in-out infinite;
+}
+
+/* ======================= DISSOLVE REVEAL (page-turn triggered) ======================= */
+/* Driven by .scene-active added via IntersectionObserver in scenes.js.
+   Replaces the old scroll-based reveal so reveals fire on page turn. */
+.scene [data-reveal] {
+  opacity: 0;
+  filter: blur(12px);
+  transform: translateY(20px);
+  transition: opacity var(--t-reveal) var(--ease-soft),
+    filter var(--t-reveal) var(--ease-soft),
+    transform var(--t-reveal) var(--ease-soft);
+}
+
+.scene.scene-active [data-reveal] {
+  opacity: 1;
+  filter: blur(0);
+  transform: translateY(0);
+}
+
+/* ======================= PAGE DOTS (right-side page indicator) ======================= */
+/* Fixed vertical dot rail on the right edge. The current page's dot lights up
+   (slime-blue + soft glow + scale 1.4); clicks jump to the matching scene.
+   Driven by .is-active toggled from scenes.js IntersectionObserver. */
+.page-dots {
+  position: fixed;
+  right: clamp(1rem, 3vw, 2rem);
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: var(--z-content);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.page-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(148, 163, 184, 0.3);
+  transition: all var(--t-warm) var(--ease-soft);
+  cursor: pointer;
+}
+
+.page-dot.is-active {
+  background: var(--color-slime-blue);
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.6);
+  transform: scale(1.4);
+}
+
+.page-dot:hover {
+  background: var(--color-soft-glow);
+}
+
+/* ======================= PAGE 1 — TITLE ======================= */
+.hero-inner {
+  gap: 1.75rem;
+}
+
+/* Logo — top of the hero stack, soft blue glow, brightened for the dark bg.
+   Wrapped in a [data-warm] span so the warm-response overlay renders (img is
+   a replaced element and cannot host ::after). Hover swaps cool→warm glow. */
+.hero-logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+
+.hero-logo-img {
+  height: 40px;
+  width: auto;
+  filter: drop-shadow(0 0 12px rgba(56, 189, 248, 0.4)) brightness(1.2);
+  transition: filter var(--t-warm) var(--ease-soft);
+}
+
+.hero-logo:hover .hero-logo-img {
+  filter: drop-shadow(0 0 16px rgba(251, 113, 133, 0.5)) brightness(1.25);
+}
+
+.hero-subtitle {
+  font-family: var(--font-display);
+  font-size: var(--fs-caption);
+  color: var(--color-mist);
+  letter-spacing: var(--ls-wide);
+}
+
+/* 双句纵书背景装饰 — 融进背景，不抢主体 */
+.bg-vertical {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  writing-mode: vertical-rl;
+  text-orientation: mixed;          /* 拉丁字母侧躺，CJK 直立 */
+  font-family: var(--font-display); /* Fraunces + Noto Serif SC 宋体 */
+  font-size: var(--fs-body-l);
+  letter-spacing: 0.25em;           /* 纵书字间距大一点更和风 */
+  pointer-events: none;
+  z-index: var(--z-content);
+  opacity: 0;                       /* 初始隐藏，淡入 */
+  animation: bgVerticalFadeIn 1.2s ease-out 0.8s forwards;
+}
+
+.bg-vertical-left {
+  left: clamp(1.5rem, 5vw, 3.5rem);
+  color: var(--color-soft-glow);    /* #BAE6FD 柔光蓝 */
+  text-shadow: 0 0 16px rgba(186, 230, 253, 0.3);  /* 微光晕，融背景 */
+}
+
+.bg-vertical-right {
+  right: clamp(1.5rem, 5vw, 3.5rem);
+  color: var(--color-slime-blue);   /* #38BDF8 史莱姆蓝 */
+  text-shadow: 0 0 16px rgba(56, 189, 248, 0.3);
+}
+
+@keyframes bgVerticalFadeIn {
+  to { opacity: 0.22; }             /* 终点极淡 0.22，融进背景 */
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bg-vertical { opacity: 0.22; animation: none; }
+}
+
+/* 移动端：缩小 + 降透明度，避免遮挡 */
+@media (max-width: 640px) {
+  .bg-vertical {
+    font-size: var(--fs-caption);
+    letter-spacing: 0.15em;
+    animation: none;
+    opacity: 0.15;
+  }
+  .bg-vertical-left { left: 0.75rem; }
+  .bg-vertical-right { right: 0.75rem; }
+}
+
+/* Scroll hint (soft blue arrow, floating) — bottom centre of title scene */
+.scroll-hint {
+  position: absolute;
+  bottom: 2rem;
+  left: 50%;
+  z-index: var(--z-content);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  color: var(--color-soft-glow);
+  animation: float-y 2.4s ease-in-out infinite;
+}
+
+.scroll-hint svg {
+  width: 22px;
+  height: 22px;
+  filter: drop-shadow(0 0 6px rgba(56, 189, 248, 0.6));
+}
+
+/* ======================= PAGE 2 — SELF INTRO (fullscreen typing) ======================= */
+/* Merges the former self-intro and name-story pages. No dialog box — the text
+   is typed directly into a centred, left-aligned column. */
+.intro-inner {
+  width: min(680px, 86%);
+  text-align: left;
+}
+
+/* Page 2 内容从固定顶部位置开始向下生长,不随打字行数变化而抬升。
+   覆盖 .scene 基础规则的 justify-content: center 为 flex-start,
+   让已显示段落位置保持不动,新段落在底部追加。 */
+.scene-intro {
+  justify-content: flex-start;
+  padding-top: clamp(8rem, 22vh, 14rem);
+  padding-bottom: clamp(5rem, 12vh, 8rem);
+  overflow-y: auto;
+}
+
+.type-text {
+  font-family: var(--font-body);
+  font-size: var(--fs-body-l);
+  line-height: 1.9;
+  color: var(--color-moonlight);
+}
+
+.type-text .dialog-line {
+  margin-bottom: 1.1rem;
+}
+
+.type-text .dialog-line:last-child {
+  margin-bottom: 0;
+}
+
+/* ======================= PAGE 3 — INTERESTS (fullscreen) ======================= */
+.interests-inner {
+  width: 100%;
+  max-width: min(560px, 86%);
+  align-items: stretch;
+}
+
+.interests-inner .interests-title {
+  text-align: center;
+}
+
+/* ======================= PAGE 4 — ENDING ======================= */
+.scene-end-inner {
+  gap: 1.25rem;
+}
+
+.end-title {
+  font-family: var(--font-display);
+  font-size: var(--fs-display-l);
+  font-weight: 500;
+  line-height: var(--lh-heading);
+  max-width: 16ch;
+}
+
+.end-sub {
+  font-family: var(--font-body);
+  font-size: var(--fs-body-l);
+  color: var(--color-mist);
+}
+
+/* 日语余韵落款 — "See you again, somewhere." 的双语呼应。
+   宋体(Noto Serif SC via --font-display) + 字间距加大,和风文学感。
+   带 data-reveal,和 end-title/end-sub 一起溶解揭示。 */
+.end-ja {
+  font-family: var(--font-display); /* Noto Serif SC 宋体 */
+  font-size: var(--fs-body);
+  color: var(--color-mist);
+  letter-spacing: 0.15em;
+  margin-top: 0.5rem;
+}
+
+.scene-end .social {
+  margin-top: 0.75rem;
+}
+
+.scene-end .footer-text {
+  margin-top: 1.75rem;
+  font-family: var(--font-body);
+  font-size: var(--fs-caption);
+  color: var(--color-shadow);
+  letter-spacing: var(--ls-wide);
+}
+
+/* ======================= Responsive tweaks ======================= */
+@media (max-width: 640px) {
+  .type-text {
+    font-size: var(--fs-body-l-zh);
+    line-height: var(--lh-body-zh);
+  }
+
+  .end-sub {
+    font-size: var(--fs-body-l-zh);
+  }
+
+  .scene-intro {
+    padding-top: clamp(6rem, 18vh, 10rem);
+  }
+
+  .bar {
+    margin-bottom: 1.1rem;
+  }
+
+  /* Page dots: shrink + tighten on phones so they stay unobtrusive. */
+  .page-dots {
+    gap: 8px;
+    right: 0.75rem;
+  }
+
+  .page-dot {
+    width: 6px;
+    height: 6px;
+  }
+}
+
+/* On very short viewports, let the interests content scroll internally
+   rather than overflowing the scene. */
+@media (max-height: 620px) {
+  .scene-interests .interests-inner {
+    max-height: 80vh;
+    overflow-y: auto;
+  }
+}

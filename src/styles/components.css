@@ -1,0 +1,327 @@
+/* =========================================================================
+   components.css — reusable component styles.
+   noise overlay · glass panel · warm response · gradient text · divider ·
+   avatar · typewriter (hero + dialog) · interest bars · buttons · social icon.
+   (Identity tags & quote blocks removed — they were mood references, not page
+   content. Dissolve-reveal rules now live in main.css, driven by .scene-active.)
+   ========================================================================= */
+
+/* ----- Film grain overlay (global) ----- */
+.noise {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-noise);
+  pointer-events: none;
+  mix-blend-mode: overlay;
+  /* Spec: opacity 0.015. Bumped to 0.04 so the grain is perceptible
+     (overlay on near-black at 0.015 is effectively invisible). Still "极淡". */
+  opacity: 0.04;
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='160'%20height='160'%3E%3Cfilter%20id='n'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.85'%20numOctaves='2'%20stitchTiles='stitch'/%3E%3C/filter%3E%3Crect%20width='100%25'%20height='100%25'%20filter='url(%23n)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 160px 160px;
+}
+
+/* ----- Glass panel ----- */
+.glass {
+  background: var(--color-surface);
+  backdrop-filter: blur(20px) saturate(1.2);
+  -webkit-backdrop-filter: blur(20px) saturate(1.2);
+  border: 1px solid rgba(186, 230, 253, 0.08);
+  border-radius: var(--radius-lg);
+}
+
+/* ----- Warm response (apply via [data-warm] on any interactive element) ----- */
+[data-warm] {
+  position: relative;
+  isolation: isolate;
+  transition: filter var(--t-warm) var(--ease-soft),
+    border-color var(--t-warm) var(--ease-soft),
+    background var(--t-warm) var(--ease-soft),
+    color var(--t-warm) var(--ease-soft),
+    transform var(--t-warm) var(--ease-soft);
+}
+
+[data-warm]::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(
+    circle at center,
+    rgba(251, 113, 133, 0.18),
+    transparent 70%
+  );
+  opacity: 0;
+  transition: opacity var(--t-warm) var(--ease-soft);
+  pointer-events: none;
+  z-index: 3;
+}
+
+[data-warm]:hover::after {
+  opacity: 1;
+}
+
+[data-warm]:hover {
+  filter: brightness(1.08);
+}
+
+[data-warm]:active {
+  transform: scale(0.97);
+}
+
+/* ----- Gradient text ----- */
+.gradient-text {
+  background: var(--gradient-trio);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+/* ----- Divider (gradient line, dissolves at both ends) ----- */
+.divider {
+  height: 1px;
+  width: 100%;
+  border: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(148, 163, 184, 0.2),
+    transparent
+  );
+  margin-block: clamp(2rem, 5vw, 3.5rem);
+}
+
+/* ----- Section title (left gradient line decoration) ----- */
+.section-title {
+  font-family: var(--font-display);
+  font-size: var(--fs-display-l);
+  color: var(--color-moonlight);
+  position: relative;
+  padding-left: 1.25rem;
+  margin-bottom: clamp(2rem, 5vw, 3rem);
+}
+
+.section-title::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.18em;
+  bottom: 0.18em;
+  width: 3px;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(180deg, var(--color-slime-blue), transparent);
+}
+
+/* ----- Avatar (breathing glow ring + warm hover) ----- */
+.avatar {
+  position: relative;
+  width: clamp(120px, 18vw, 180px);
+  height: clamp(120px, 18vw, 180px);
+  border-radius: 50%;
+  margin: 0 auto;
+}
+
+.avatar-ring {
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  border: 2px solid var(--color-slime-blue);
+  box-shadow: var(--glow-avatar);
+  animation: breathing 4s ease-in-out infinite;
+  transition: border-color var(--t-warm) var(--ease-soft),
+    box-shadow var(--t-warm) var(--ease-soft);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+  filter: saturate(1.1) contrast(1.05);
+  position: relative;
+  z-index: 1;
+}
+
+.avatar:hover .avatar-ring {
+  border-color: var(--color-love-ember);
+  box-shadow: var(--glow-avatar-warm);
+}
+
+/* ----- Typewriter (hero, looping) ----- */
+.tw-text {
+  font-family: var(--font-mono);
+  font-size: var(--fs-display-l);
+  color: var(--color-moonlight);
+  letter-spacing: var(--ls-tight);
+  line-height: var(--lh-heading);
+  min-height: 1.2em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-align: center;
+  text-shadow: 0 0 24px rgba(56, 189, 248, 0.15);
+}
+
+/* Hero chars: inline-block (nowrap context) + 0.6s afterglow */
+.tw-char {
+  display: inline-block;
+  animation: afterglow 0.6s ease-out forwards;
+}
+
+.tw-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1.05em;
+  margin-left: 4px;
+  background: var(--color-soft-glow);
+  border-radius: 2px;
+  vertical-align: -0.12em;
+  animation: cursor-blink 1s steps(1) infinite,
+    cursor-glow 2s ease-in-out infinite;
+}
+
+/* ----- Typewriter (dialog, wrapping) ----- */
+/* Dialog chars use display: inline so paragraphs wrap naturally at word
+   boundaries. The char is rendered in the DOM up front (final layout) but
+   hidden via opacity:0; adding the .shown class reveals it with a fast fade
+   plus the 0.6s afterglow. Because the DOM layout is fixed from the start,
+   neighbouring text never shifts as characters are revealed. */
+.tw-dchar {
+  display: inline;
+  opacity: 0;
+  transition: opacity 0.05s;
+}
+
+.tw-dchar.shown {
+  opacity: 1;
+  animation: afterglow 0.6s ease-out forwards;
+}
+
+/* No-break word groups (e.g. ⌈朝田诗乃⌋). Wrapping CJK phrases in
+   <span class="cn"> keeps them on one line: the browser would otherwise break
+   between any two CJK characters, splitting a name across lines. The inner
+   .tw-dchar spans still type out one character at a time. */
+.cn {
+  white-space: nowrap;
+  display: inline;
+}
+
+/* Belt-and-suspenders line breaking for the dialog column:
+   keep-all stops CJK text from breaking mid-word; break-word lets long Latin
+   runs wrap when they otherwise would overflow the column. */
+.type-text,
+.dialog-line {
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+
+/* ----- Interest bars (gel fill) ----- */
+.interests-title {
+  font-family: var(--font-display);
+  font-size: var(--fs-heading);
+  color: var(--color-moonlight);
+  margin-bottom: 1.75rem;
+}
+
+.bars {
+  width: 100%;
+}
+
+.bar {
+  margin-bottom: 1.4rem;
+}
+
+.bar:last-child {
+  margin-bottom: 0;
+}
+
+.bar-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 0.55rem;
+}
+
+.bar-label > span:first-child {
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+  color: var(--color-moonlight);
+}
+
+.bar-val {
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  color: var(--color-gel-cyan);
+  letter-spacing: var(--ls-wide);
+}
+
+.bar-track {
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: rgba(148, 163, 184, 0.1);
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+  width: 0;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(90deg, var(--color-slime-blue), var(--color-gel-cyan));
+  box-shadow: var(--glow-bar);
+  transition: width var(--t-bar) var(--ease-soft);
+}
+
+/* ----- Button (reusable, pill, glass + warm hover) ----- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.75rem 2rem;
+  min-height: 44px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(186, 230, 253, 0.1);
+  color: var(--color-moonlight);
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.btn:hover {
+  border-color: rgba(251, 113, 133, 0.3);
+  background: var(--color-surface-bright);
+  color: var(--color-moonlight);
+}
+
+.btn:active {
+  background: rgba(254, 205, 211, 0.12);
+}
+
+/* ----- Social icon ----- */
+.social {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid rgba(186, 230, 253, 0.1);
+  background: var(--color-surface);
+  color: var(--color-mist);
+}
+
+.social svg {
+  width: 16px;
+  height: 16px;
+}
+
+.social:hover {
+  color: var(--color-gel-cyan);
+  border-color: rgba(251, 113, 133, 0.3);
+}

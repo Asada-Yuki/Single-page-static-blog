@@ -1,0 +1,152 @@
+/* =========================================================================
+   animations.css — keyframes for the five signature motions.
+   1. Breathing Glow   — 4s, opacity + box-shadow
+   2. Gel Drift        — 20-30s, transform translate + scale
+   3. Typewriter Afterglow — 0.6s, text-shadow decay per char
+   4. Dissolve Reveal  — handled via CSS transition + .revealed class
+   5. Warm Response    — handled via :hover (see components.css)
+   Plus: cursor blink, scroll hint float.
+   prefers-reduced-motion: neutralises everything at the bottom.
+   ========================================================================= */
+
+/* ----- 1. Breathing Glow (4s) ----- */
+@keyframes breathing {
+  0%, 100% {
+    opacity: 0.45;
+    box-shadow:
+      0 0 20px 4px rgba(56, 189, 248, 0.35),
+      0 0 40px 8px rgba(186, 230, 253, 0.18);
+  }
+  50% {
+    opacity: 0.85;
+    box-shadow:
+      0 0 32px 8px rgba(56, 189, 248, 0.6),
+      0 0 60px 14px rgba(186, 230, 253, 0.32);
+  }
+}
+
+/* ----- 2. Gel Drift (18–26s) ----- */
+/* Amplitude raised ~80% and periods shortened so the blobs travel further and
+   faster, giving the background a more alive, breathing motion. Each blob has
+   its own period (18/20/22/26s) so they never resync into a visible pattern. */
+@keyframes drift1 {
+  0%, 100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(220px, 160px) scale(1.25);
+  }
+}
+
+@keyframes drift2 {
+  0%, 100% {
+    transform: translate(0, 0) scale(1.05);
+  }
+  50% {
+    transform: translate(-250px, -130px) scale(0.85);
+  }
+}
+
+@keyframes drift3 {
+  0%, 100% {
+    transform: translate(-50%, 0) scale(1);
+  }
+  50% {
+    transform: translate(-42%, -110px) scale(1.3);
+  }
+}
+
+@keyframes drift4 {
+  0%, 100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(-180px, -120px) scale(1.2);
+  }
+}
+
+/* ----- Abyss breathe (30s) ----- */
+/* The body background slowly oscillates between abyss and deep-void so the
+   whole scene inhales and exhales once every 30s. Subtle by design: a 5-lumen
+   shift, not a flash. Disabled under reduced-motion. */
+@keyframes abyss-breathe {
+  0%, 100% {
+    background-color: #0B1426;
+  }
+  50% {
+    background-color: #060D17;
+  }
+}
+
+/* ----- 3. Typewriter Afterglow (0.6s) ----- */
+@keyframes afterglow {
+  0% {
+    text-shadow: 0 0 12px rgba(56, 189, 248, 0.9);
+  }
+  100% {
+    text-shadow: none;
+  }
+}
+
+@keyframes cursor-blink {
+  0%, 49% {
+    opacity: 1;
+  }
+  50%, 100% {
+    opacity: 0;
+  }
+}
+
+@keyframes cursor-glow {
+  0%, 100% {
+    box-shadow: 0 0 6px rgba(186, 230, 253, 0.7);
+  }
+  50% {
+    box-shadow: 0 0 12px rgba(56, 189, 248, 0.9);
+  }
+}
+
+/* ----- Scroll hint float ----- */
+@keyframes float-y {
+  0%, 100% {
+    transform: translateX(-50%) translateY(0);
+    opacity: 0.45;
+  }
+  50% {
+    transform: translateX(-50%) translateY(8px);
+    opacity: 0.85;
+  }
+}
+
+/* ----- prefers-reduced-motion: disable all motion ----- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* Freeze gel blobs into a static, dim state instead of drifting. */
+  .gel {
+    animation: none !important;
+    opacity: 0.3 !important;
+  }
+
+  /* Freeze the body background — no 30s breathing under reduced motion. */
+  body {
+    animation: none !important;
+    background-color: #0B1426 !important;
+  }
+
+  .tw-cursor {
+    animation: none !important;
+    opacity: 0.6 !important;
+  }
+
+  .scroll-hint {
+    animation: none !important;
+  }
+}

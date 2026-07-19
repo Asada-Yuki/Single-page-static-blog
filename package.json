@@ -1,0 +1,15 @@
+{
+  "name": "yuki-art",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "yuki.art — Asada Yuki personal brand site. 凪 — Slumber in Blue.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^5.4.10"
+  }
+}

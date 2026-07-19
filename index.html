@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <link rel="icon" type="image/png" href="./src/assets/images/favicon.png" />
+    <meta name="theme-color" content="#0B1426" />
+    <meta
+      name="description"
+      content="Asada Yuki (朝田由纪) — a slime, cold and soft, sleeping peacefully. Personal site: yuki.art."
+    />
+    <meta name="author" content="Asada Yuki" />
+    <meta property="og:title" content="Asada Yuki · yuki.art" />
+    <meta
+      property="og:description"
+      content="Currently, I am a slime, cold and soft, sleeping peacefully. I hope to receive love."
+    />
+    <meta property="og:type" content="website" />
+
+    <!-- Fonts: Fraunces + Noto Serif SC / Inter + Noto Sans SC / JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,300..600&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@300;400;500&family=Noto+Serif+SC:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+
+    <title>Asada Yuki · yuki.art</title>
+
+    <!-- Critical inline CSS — prevents FOUC (white flash) before external CSS loads.
+         Applied during HTML parse, before main.css / Google Fonts stylesheet is ready. -->
+    <style>
+      html, body {
+        background-color: #0B1426;
+        color: #E2E8F0;
+        margin: 0;
+        /* 30s abyss breathe — the body background slowly oscillates between
+           abyss (#0B1426) and deep-void (#060D17). Keyframes live in
+           animations.css. Disabled under reduced-motion (see below). */
+        animation: abyss-breathe 30s ease-in-out infinite;
+      }
+      /* Hero content fades in smoothly after CSS/font is ready, avoiding naked-avatar flash */
+      .hero-inner {
+        opacity: 0;
+        animation: heroFadeIn 0.6s ease-out 0.15s forwards;
+      }
+      @keyframes heroFadeIn {
+        to { opacity: 1; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .hero-inner { opacity: 1; animation: none; }
+        html, body { animation: none; background-color: #0B1426; }
+      }
+    </style>
+
+    <!-- Disable scroll restoration as early as possible (during HTML parse,
+         before any deferred module runs) so a refresh never resumes the last
+         scroll position. main.js adds window.scrollTo(0, 0) as a guarantee. -->
+    <script>
+      if ('scrollRestoration' in history) {
+        history.scrollRestoration = 'manual';
+      }
+    </script>
+  </head>
+  <body>
+    <!-- Global film grain overlay -->
+    <div class="noise" aria-hidden="true"></div>
+
+    <!-- Global gel drift background (fixed — seamless across all page turns) -->
+    <div class="gel-bg" aria-hidden="true">
+      <span class="gel gel-1"></span>
+      <span class="gel gel-2"></span>
+      <span class="gel gel-3"></span>
+      <span class="gel gel-4"></span>
+    </div>
+
+    <main>
+      <!-- ============ PAGE 1 — TITLE ============ -->
+      <section class="scene scene-title" id="scene-title">
+        <div class="scene-inner hero-inner">
+          <span class="hero-logo" data-warm>
+            <img
+              class="hero-logo-img"
+              src="./src/assets/images/logo.svg"
+              alt="yuki.art"
+            />
+          </span>
+
+          <div class="avatar" data-warm>
+            <div class="avatar-ring" aria-hidden="true"></div>
+            <img
+              class="avatar-img"
+              src="./src/assets/images/avatar.jpg"
+              alt="Asada Yuki 的头像"
+              width="180"
+              height="180"
+              loading="eager"
+            />
+          </div>
+
+          <h1 class="tw-text" id="typewriter" aria-label="Asada Yuki — Suraimu Slime">
+            I'm Asada Yuki
+          </h1>
+
+          <p class="hero-subtitle">Asada-Yuki · Genderless Blue Slime</p>
+        </div>
+
+        <p class="bg-vertical bg-vertical-left" aria-hidden="true">Eloim Essaim</p>
+        <p class="bg-vertical bg-vertical-right" aria-hidden="true">我は求め訴えたり</p>
+
+        <a class="scroll-hint" href="#scene-intro" aria-label="向下滚动至下一页">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M6 9l6 6 6-6" />
+          </svg>
+        </a>
+      </section>
+
+      <!-- ============ PAGE 2 — SELF INTRO + NAME STORY (fullscreen typing) ============ -->
+      <section class="scene scene-intro" id="scene-intro">
+        <div class="scene-inner intro-inner">
+          <div class="type-text" id="intro-text"></div>
+        </div>
+
+        <a class="scroll-hint" href="#scene-interests" aria-label="向下滚动至下一页">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M6 9l6 6 6-6" />
+          </svg>
+        </a>
+      </section>
+
+      <!-- ============ PAGE 3 — INTERESTS (fullscreen) ============ -->
+      <section class="scene scene-interests" id="scene-interests">
+        <div class="scene-inner interests-inner">
+          <h3 class="interests-title">Interests</h3>
+
+          <div class="bars" data-bars>
+            <div class="bar">
+              <div class="bar-label">
+                <span>Animation</span>
+                <span class="bar-val">90%</span>
+              </div>
+              <div class="bar-track">
+                <div class="bar-fill" data-bar="90"></div>
+              </div>
+            </div>
+
+            <div class="bar">
+              <div class="bar-label">
+                <span>Hi-Fi</span>
+                <span class="bar-val">85%</span>
+              </div>
+              <div class="bar-track">
+                <div class="bar-fill" data-bar="85"></div>
+              </div>
+            </div>
+
+            <div class="bar">
+              <div class="bar-label">
+                <span>JDM</span>
+                <span class="bar-val">70%</span>
+              </div>
+              <div class="bar-track">
+                <div class="bar-fill" data-bar="70"></div>
+              </div>
+            </div>
+
+            <div class="bar">
+              <div class="bar-label">
+                <span>Motorcycle</span>
+                <span class="bar-val">87%</span>
+              </div>
+              <div class="bar-track">
+                <div class="bar-fill" data-bar="87"></div>
+              </div>
+            </div>
+
+            <div class="bar">
+              <div class="bar-label">
+                <span>Travel</span>
+                <span class="bar-val">60%</span>
+              </div>
+              <div class="bar-track">
+                <div class="bar-fill" data-bar="60"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <a class="scroll-hint" href="#scene-end" aria-label="向下滚动至下一页">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M6 9l6 6 6-6" />
+          </svg>
+        </a>
+      </section>
+
+      <!-- ============ PAGE 4 — ENDING ============ -->
+      <section class="scene scene-end" id="scene-end">
+        <div class="scene-inner scene-end-inner">
+          <h2 class="end-title gradient-text" data-reveal>Let's start fresh.</h2>
+          <p class="end-sub" data-reveal>See you again, somewhere.</p>
+          <p class="end-ja" data-reveal>また、どこかで。</p>
+
+          <a
+            class="social"
+            href="https://x.com/AsadaYuki_Art"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Twitter / X"
+            data-warm
+          >
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path
+                d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"
+              />
+            </svg>
+          </a>
+
+          <p class="footer-text">© 2026 Asada Yuki · Slime&rsquo;s Home</p>
+        </div>
+      </section>
+    </main>
+
+    <!-- Right-side page indicator: 4 dots, one per scene. Current page lights
+         up (driven by scenes.js IntersectionObserver). Click jumps to scene. -->
+    <nav class="page-dots" aria-label="页面导航">
+      <a href="#scene-title" class="page-dot is-active" data-page="0" aria-label="第 1 页"></a>
+      <a href="#scene-intro" class="page-dot" data-page="1" aria-label="第 2 页"></a>
+      <a href="#scene-interests" class="page-dot" data-page="2" aria-label="第 3 页"></a>
+      <a href="#scene-end" class="page-dot" data-page="3" aria-label="第 4 页"></a>
+    </nav>
+
+    <noscript>
+      <style>
+        .tw-text { font-family: 'JetBrains Mono', monospace; }
+        .type-text { font-family: 'Inter', 'Noto Sans SC', sans-serif; }
+      </style>
+    </noscript>
+
+    <script type="module" src="./src/scripts/main.js"></script>
+  </body>
+</html>
