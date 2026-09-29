@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light">
     <title>{{SITE_NAME}}</title>
-    <link rel="stylesheet" href="/style.css">
+    <link rel="stylesheet" href="/style.css?v={{STYLE_VERSION}}">
   </head>
   <body>
     <a class="skip-link" href="#timeline-content">跳到内容</a>
@@ -35,6 +35,6 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg>
       </button>
     </dialog>
-    <script data-cfasync="false" type="module" src="/image-viewer.js"></script>
+    <script data-cfasync="false" type="module" src="/image-viewer.js?v={{IMAGE_VIEWER_VERSION}}"></script>
   </body>
 </html>

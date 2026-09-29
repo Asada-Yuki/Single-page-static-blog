@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { cp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -254,16 +255,21 @@ async function main() {
   posts.sort((a, b) => b.iso.localeCompare(a.iso) || b.path.localeCompare(a.path));
 
   const template = await readFile(join(root, 'src', 'template.html'), 'utf8');
+  const stylesheet = await readFile(join(root, 'src', 'style.css'), 'utf8');
+  const imageViewer = await readFile(join(root, 'src', 'image-viewer.js'), 'utf8');
+  const versionOf = (content) => createHash('sha256').update(content).digest('hex').slice(0, 12);
   const html = template
     .replaceAll('{{SITE_NAME}}', escapeHtml(site.name.trim()))
+    .replace('{{STYLE_VERSION}}', versionOf(stylesheet))
+    .replace('{{IMAGE_VIEWER_VERSION}}', versionOf(imageViewer))
     .replace('{{QUICK_BROWSE}}', renderQuickBrowse(posts))
     .replace('{{TIMELINE}}', renderTimeline(posts));
 
   await rm(distRoot, { recursive: true, force: true });
   await mkdir(distRoot, { recursive: true });
   await writeFile(join(distRoot, 'index.html'), html);
-  await cp(join(root, 'src', 'style.css'), join(distRoot, 'style.css'));
-  await cp(join(root, 'src', 'image-viewer.js'), join(distRoot, 'image-viewer.js'));
+  await writeFile(join(distRoot, 'style.css'), stylesheet);
+  await writeFile(join(distRoot, 'image-viewer.js'), imageViewer);
   await cp(publicRoot, distRoot, {
     recursive: true,
     filter: (path) => !path.endsWith('.gitkeep')
