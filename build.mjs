@@ -323,6 +323,7 @@ async function main() {
   const template = await readFile(join(root, 'src', 'template.html'), 'utf8');
   const notFoundTemplate = await readFile(join(root, 'src', '404.html'), 'utf8');
   const stylesheet = await readFile(join(root, 'src', 'style.css'), 'utf8');
+  const theme = await readFile(join(root, 'src', 'theme.js'), 'utf8');
   const imageViewer = await readFile(join(root, 'src', 'image-viewer.js'), 'utf8');
   const quickBrowse = await readFile(join(root, 'src', 'quick-browse.js'), 'utf8');
   const versionOf = (content) => createHash('sha256').update(content).digest('hex').slice(0, 12);
@@ -336,6 +337,7 @@ async function main() {
     SITE_URL: escapeHtml(siteUrl),
     YEAR: String(new Date().getUTCFullYear()),
     STYLE_VERSION: versionOf(stylesheet),
+    THEME_VERSION: versionOf(theme),
     IMAGE_VIEWER_VERSION: versionOf(imageViewer),
     QUICK_BROWSE_VERSION: versionOf(quickBrowse),
     QUICK_BROWSE: renderQuickBrowse(posts),
@@ -349,6 +351,7 @@ async function main() {
   await writeFile(join(distRoot, 'index.html'), html);
   await writeFile(join(distRoot, '404.html'), notFoundHtml);
   await writeFile(join(distRoot, 'style.css'), stylesheet);
+  await writeFile(join(distRoot, 'theme.js'), theme);
   await writeFile(join(distRoot, 'image-viewer.js'), imageViewer);
   await writeFile(join(distRoot, 'quick-browse.js'), quickBrowse);
   await cp(publicRoot, distRoot, {

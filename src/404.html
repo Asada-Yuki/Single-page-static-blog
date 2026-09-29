@@ -3,13 +3,18 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="color-scheme" content="light">
+    <meta name="color-scheme" content="light dark">
+    <script data-cfasync="false" src="/theme.js?v={{THEME_VERSION}}"></script>
     <meta name="robots" content="noindex, nofollow, noarchive">
     <title>404 · {{SITE_NAME}}</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="/style.css?v={{STYLE_VERSION}}">
   </head>
   <body class="not-found-page">
+    <button class="theme-toggle theme-toggle--floating" data-theme-toggle type="button" aria-label="深色模式" aria-pressed="false" title="切换到深色模式">
+      <svg class="theme-toggle__icon theme-toggle__icon--moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.2 15.1A8.5 8.5 0 0 1 8.9 3.8 8.6 8.6 0 1 0 20.2 15.1Z" /></svg>
+      <svg class="theme-toggle__icon theme-toggle__icon--sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" /><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42" /></svg>
+    </button>
     <main class="not-found">
       <a class="not-found__home" href="/" aria-label="返回 {{SITE_NAME}} 时间流">{{SITE_NAME}}</a>
       <p class="not-found__code">404</p>
