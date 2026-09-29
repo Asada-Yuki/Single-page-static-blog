@@ -165,13 +165,15 @@ async function handleLogin(request, env) {
   return json({ authenticated: true }, 200, { 'Set-Cookie': cookieHeader(token, SESSION_SECONDS) });
 }
 
-function timestampForFile(date) {
-  return date.toISOString().replace(/:/g, '-');
+async function handleAttempt(request, env) {
+  if (!sameOrigin(request)) throw new HttpError(403, 'Request origin was rejected.');
+  assertConfiguration(env);
+  if (!await hasSession(request, env.AUTHOR_KEY)) throw new HttpError(401, 'Your session has expired.');
+  return json({ id: crypto.randomUUID(), timestamp: new Date().toISOString() });
 }
 
-function randomSuffix() {
-  const bytes = crypto.getRandomValues(new Uint8Array(4));
-  return [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+function timestampForFile(date) {
+  return date.toISOString().replace(/:/g, '-');
 }
 
 function decodeWebp(base64) {
@@ -265,10 +267,16 @@ async function createPost(payload, env) {
     throw new HttpError(503, 'GitHub publishing is not configured.');
   }
   const images = validatePost(payload);
-  const createdAt = new Date();
+  if (typeof payload.attemptId !== 'string' || !UUID_PATTERN.test(payload.attemptId)) {
+    throw new HttpError(400, 'The publish attempt is invalid.');
+  }
+  const createdAt = new Date(payload.timestamp);
+  if (Number.isNaN(createdAt.getTime()) || createdAt.toISOString() !== payload.timestamp) {
+    throw new HttpError(400, 'The publish timestamp is invalid.');
+  }
   const timestamp = timestampForFile(createdAt);
   const folder = `${createdAt.getUTCFullYear()}/${String(createdAt.getUTCMonth() + 1).padStart(2, '0')}`;
-  const suffix = randomSuffix();
+  const suffix = payload.attemptId.replaceAll('-', '').toLowerCase();
 
   const imageEntries = [];
   for (let index = 0; index < images.length; index += 1) {
@@ -354,6 +362,7 @@ export default {
         return json({ authenticated: await hasSession(request, env.AUTHOR_KEY) });
       }
       if (pathname === '/api/login' && request.method === 'POST') return await handleLogin(request, env);
+      if (pathname === '/api/attempt' && request.method === 'POST') return await handleAttempt(request, env);
       if (pathname === '/api/logout' && request.method === 'POST') {
         if (!sameOrigin(request)) throw new HttpError(403, 'Request origin was rejected.');
         return json({ ok: true }, 200, { 'Set-Cookie': cookieHeader('', 0) });

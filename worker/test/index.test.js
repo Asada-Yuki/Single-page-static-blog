@@ -63,6 +63,19 @@ test('writer headers, origin checks, session cookie, and GitHub publishing', asy
   const session = await worker.fetch(makeRequest('/api/session', { cookie }), env);
   assert.deepEqual(await session.json(), { authenticated: true });
 
+  const attemptResponse = await worker.fetch(makeRequest('/api/attempt', { method: 'POST', cookie }), env);
+  assert.equal(attemptResponse.status, 200);
+  const attempt = await attemptResponse.json();
+  assert.match(attempt.id, /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i);
+  assert.match(attempt.timestamp, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+
+  const foreignOriginAttempt = await worker.fetch(makeRequest('/api/attempt', {
+    method: 'POST',
+    requestOrigin: 'https://attacker.example',
+    cookie
+  }), env);
+  assert.equal(foreignOriginAttempt.status, 403);
+
   let githubCalls = 0;
   const unauthenticatedPublish = await worker.fetch(makeRequest('/api/publish', {
     method: 'POST',
@@ -80,8 +93,22 @@ test('writer headers, origin checks, session cookie, and GitHub publishing', asy
   assert.equal(crossOriginPublish.status, 403);
   assert.equal(githubCalls, 0);
 
+  const invalidTimestampPublish = await worker.fetch(makeRequest('/api/publish', {
+    method: 'POST',
+    cookie,
+    body: {
+      body: 'invalid timestamp',
+      images: [],
+      attemptId: attempt.id,
+      timestamp: '2026-02-31T12:00:00.000Z'
+    }
+  }), env);
+  assert.equal(invalidTimestampPublish.status, 400);
+  assert.equal(githubCalls, 0);
+
   const originalFetch = globalThis.fetch;
   const githubRequests = [];
+  const postPaths = [];
   globalThis.fetch = async (input, init = {}) => {
     githubCalls += 1;
     const url = new URL(typeof input === 'string' ? input : input.url);
@@ -105,6 +132,8 @@ test('writer headers, origin checks, session cookie, and GitHub publishing', asy
     } else if (method === 'GET' && path.endsWith('/git/commits/parent-sha')) {
       data = { tree: { sha: 'base-tree-sha' } };
     } else if (method === 'POST' && path.endsWith('/git/trees')) {
+      const tree = JSON.parse(init.body);
+      postPaths.push(tree.tree.find((entry) => entry.path.endsWith('.md')).path);
       data = { sha: 'tree-sha' };
     } else if (method === 'POST' && path.endsWith('/git/commits')) {
       data = { sha: 'commit-sha' };
@@ -125,13 +154,22 @@ test('writer headers, origin checks, session cookie, and GitHub publishing', asy
     const publish = await worker.fetch(makeRequest('/api/publish', {
       method: 'POST',
       cookie,
-      body: { body: 'A test post', images: [] }
+      body: { body: 'A test post', images: [], attemptId: attempt.id, timestamp: attempt.timestamp }
     }), env);
     assert.equal(publish.status, 200);
     const result = await publish.json();
     assert.equal(result.ok, true);
-    assert.match(result.timestamp, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+    assert.equal(result.timestamp, attempt.timestamp);
     assert.equal(githubRequests.length, 6);
+
+    const retriedPublish = await worker.fetch(makeRequest('/api/publish', {
+      method: 'POST',
+      cookie,
+      body: { body: 'A test post', images: [], attemptId: attempt.id, timestamp: attempt.timestamp }
+    }), env);
+    assert.equal(retriedPublish.status, 200);
+    assert.equal(postPaths.length, 2);
+    assert.equal(postPaths[0], postPaths[1]);
   } finally {
     globalThis.fetch = originalFetch;
   }

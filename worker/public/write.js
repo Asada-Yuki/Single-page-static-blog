@@ -12,10 +12,12 @@ const loginButton = document.querySelector('#login-button');
 const publishStatus = document.querySelector('#publish-status');
 const logoutButton = document.querySelector('#logout-button');
 const draftKey = 'single-timeline-draft-v1';
+const attemptKey = 'single-timeline-attempt-v1';
 const maxImages = 5;
 const maxImageBytes = 1024 * 1024;
 const images = new Map();
 let pendingImageCount = 0;
+let pendingAttempt = null;
 
 function setView(authenticated) {
   loginView.hidden = authenticated;
@@ -48,6 +50,49 @@ function setPublishing(publishing) {
   publishButton.disabled = publishing;
   logoutButton.disabled = publishing;
   for (const button of attachments.querySelectorAll('button')) button.disabled = publishing;
+}
+
+function isPublishAttempt(value) {
+  if (!value || typeof value.id !== 'string' || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(value.id)) return false;
+  if (typeof value.timestamp !== 'string') return false;
+  const timestamp = new Date(value.timestamp);
+  return !Number.isNaN(timestamp.getTime()) && timestamp.toISOString() === value.timestamp;
+}
+
+async function getPublishAttempt() {
+  if (pendingAttempt) return pendingAttempt;
+
+  try {
+    const stored = JSON.parse(localStorage.getItem(attemptKey) || 'null');
+    if (isPublishAttempt(stored)) {
+      pendingAttempt = stored;
+      return stored;
+    }
+  } catch {
+    // Start a fresh attempt when browser storage is unavailable or malformed.
+  }
+
+  const response = await fetch('/api/attempt', {
+    method: 'POST',
+    credentials: 'same-origin'
+  });
+  const result = await readResponseJson(response);
+  if (response.status === 401) {
+    setView(false);
+    loginStatus.textContent = 'Session expired. Enter the author key.';
+    throw new Error('Session expired. Enter the author key.');
+  }
+  if (!response.ok || !isPublishAttempt(result)) {
+    throw new Error(result.error || `Publish setup failed (HTTP ${response.status}).`);
+  }
+
+  pendingAttempt = { id: result.id, timestamp: result.timestamp };
+  try {
+    localStorage.setItem(attemptKey, JSON.stringify(pendingAttempt));
+  } catch {
+    // Keep the attempt in memory; the draft can still be published in this tab.
+  }
+  return pendingAttempt;
 }
 
 function restoreDraft() {
@@ -202,6 +247,7 @@ function getReferencedImages(body) {
 
 async function publish(event) {
   event.preventDefault();
+  if (editorForm.getAttribute('aria-busy') === 'true') return;
   if (pendingImageCount > 0) {
     publishStatus.textContent = 'Wait for selected images to finish processing.';
     return;
@@ -225,8 +271,11 @@ async function publish(event) {
   publishStatus.textContent = 'Publishing…';
 
   try {
+    const attempt = await getPublishAttempt();
     const payload = {
       body,
+      attemptId: attempt.id,
+      timestamp: attempt.timestamp,
       images: await Promise.all(selectedImages.map(async (image) => ({
         id: image.id,
         data: await blobToBase64(image.blob)
@@ -251,8 +300,10 @@ async function publish(event) {
     images.clear();
     postBody.value = '';
     renderAttachments();
+    pendingAttempt = null;
     try {
       localStorage.removeItem(draftKey);
+      localStorage.removeItem(attemptKey);
     } catch {
       // Publishing succeeded; the visible draft has already been cleared.
     }
