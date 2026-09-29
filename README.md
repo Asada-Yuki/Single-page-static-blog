@@ -1,106 +1,69 @@
-# yuki.art — 凪 — Slumber in Blue
+# 单一时间流
 
-Single-page personal brand site for **Asada Yuki (朝田由纪)**.
+个人文字与图片时间流。公开端只有 `/`；作者端由 Cloudflare Worker 提供。每篇内容只有 Markdown 文件，UTC 时间来自文件名。
 
-> *Currently, I am a slime, cold and soft, sleeping peacefully. I hope to receive love.*
+## 页面与存储
 
-The site opens like a sleeping slime at the bottom of a deep sea — cold, dark,
-quiet, but breathing. A faint warm glow answers only when you reach out.
+- 页面是单一连续时间流，按 UTC 从新到旧排列。
+- 正文、图片与外部视频链接构成每条记录；没有标签、分类、评论、搜索、分页或归档。
+- 构建生成静态 `dist/index.html`，不运行前端 JavaScript。
+- Cloudflare Worker 的 `/write` 提供私有作者入口，并将正文和图片作为一个 GitHub commit 发布。
+- 此仓库可公开读取；推送到仓库的文章、图片和 Git 历史也会公开。不要把草稿、密钥或私人资料推送到仓库。
 
----
+## 本地构建
 
-## Tech stack
-
-- **Vite** — zero-config dev server & build.
-- **Vanilla CSS** — CSS Custom Properties for the full colour palette, type
-  scale, spacing, radii and motion tokens. No CSS framework, no Tailwind.
-- **Vanilla ES6+ JavaScript** — no jQuery, no UI framework. Three tiny modules:
-  `main.js`, `typewriter.js`, `reveal.js`.
-- **Google Fonts** — Fraunces + Noto Serif SC (display), Inter + Noto Sans SC
-  (body), JetBrains Mono (typewriter / tags).
-
-## Project structure
-
-```
-yuki-art/
-├── index.html
-├── package.json
-├── vite.config.js
-├── README.md
-└── src/
-    ├── styles/
-    │   ├── variables.css      # colour palette, type scale, tokens
-    │   ├── base.css           # reset + base typography
-    │   ├── animations.css     # five signature keyframes
-    │   ├── components.css     # avatar / buttons / bars / tags / glass …
-    │   └── main.css           # @import entry + page layout
-    ├── scripts/
-    │   ├── main.js            # boot
-    │   ├── typewriter.js      # typewriter + afterglow
-    │   └── reveal.js          # dissolve reveal (IntersectionObserver)
-    └── assets/
-        └── images/
-            ├── avatar.jpg     # 站主头像
-            ├── logo.svg       # brand mark
-            └── favicon.png    # favicon
+```sh
+npm ci
+npm run build
 ```
 
-## Run locally
+构建输出在 `dist/`。本地预览：
 
-```bash
-cd yuki-art
-npm install
-npm run dev
+```sh
+python3 -m http.server 8080 --directory dist
 ```
 
-Vite serves the site at `http://localhost:5173` (opens automatically).
+作者名在 `site.json`。UTC 内容文件放在 `content/YYYY/MM/`，图片放在 `public/images/YYYY/MM/`。
 
-### Build & preview
+## Cloudflare Pages
 
-```bash
-npm run build     # outputs to ./dist
-npm run preview   # serves the production build locally
+此项目使用仓库根目录构建：
+
+| 设置 | 值 |
+|---|---|
+| Production branch | `main` |
+| Build command | `npm ci && npm run build` |
+| Build output directory | `dist` |
+
+Cloudflare Pages 收到 `main` 的提交后会自动构建并部署。
+
+## 作者写作页 Worker
+
+Worker 配置已指向 `Asada-Yuki/Single-page-static-blog` 的 `main` 分支。首次部署需在 Cloudflare 登录，并设置两个 Secret：
+
+```sh
+cd worker
+npx wrangler@4 login
+openssl rand -hex 32
+npx wrangler@4 secret put AUTHOR_KEY
+npx wrangler@4 secret put GITHUB_TOKEN
+npx wrangler@4 deploy
 ```
 
-## The five signature motions
+GitHub token 只需对此仓库的 `Contents: Read and write` 权限。不要提交 `AUTHOR_KEY` 或 `GITHUB_TOKEN`。部署后为 Worker 绑定作者域名，作者入口是 `/write`。
 
-| # | Motion | Where | How |
-|---|--------|-------|-----|
-| 1 | **Breathing Glow** | avatar ring | `@keyframes breathing`, 4s, `opacity` + `box-shadow` |
-| 2 | **Gel Drift** | hero background blobs | `@keyframes drift1/2/3`, 24–30s, `transform` + `blur(80px)` |
-| 3 | **Typewriter Afterglow** | hero typewriter | per-char `<span>` + `@keyframes afterglow`, 0.6s 淡蓝尾迹 |
-| 4 | **Dissolve Reveal** | scroll-in blocks | `IntersectionObserver` toggles `.revealed`; `blur(12px)→0`, 0.8s |
-| 5 | **Warm Response** | all `[data-warm]` elements | `:hover` radial `#FB7185` glow (`opacity 0→0.18`), 0.4s |
+会话 Cookie 为 `HttpOnly`、`Secure`、`SameSite=Strict`，有效期 180 天。更换 `AUTHOR_KEY` 会使现有会话失效。
 
-## Accessibility
+## UTC 内容格式
 
-- Every image has `alt`; interactive elements have `aria-label`.
-- `prefers-reduced-motion: reduce` disables all animation and reveals content
-  immediately.
-- Colour contrast on body text meets WCAG AA (moonlight `#E2E8F0` on abyss
-  `#0B1426` ≈ 13:1).
-- Touch targets ≥ 44px.
-- Right-click / text selection / copy are **not** disabled — the old site's
-  anti-UX is intentionally dropped.
+每次发布生成一个 Markdown 文件，例如：
 
-## Assets
+```text
+content/2026/09/2026-09-27T15-34-03.123Z-a1b2c3d4.md
+```
 
-- `avatar.jpg` — provided by the site owner.
-- `logo.svg` — brand mark, shown subtly in the footer.
-- `favicon.png` — browser tab icon.
+文件名使用 ISO 8601 UTC，冒号替换为连字符。页面日期、时间和排序全部使用 UTC。正文没有 Front Matter；短句、长文、图片和视频链接都使用同一种记录格式。
 
-All background effects (gel blobs, grain, gradients, glows) are pure CSS / SVG —
-no image assets required, no WebGL/Canvas.
+图片在浏览器中压缩为 WebP，最长边 2048 像素，每篇最多 5 张、每张不超过 1 MB。YouTube、Vimeo 和 Bilibili 的独占行链接会显示为延迟加载播放器；原始 HTML 关闭。
 
-## Design fidelity notes
-
-- Colour values, type scale, radii and motion durations are taken verbatim from
-  the visual spec *"yuki.art 情绪化视觉方案 — 凪 — Slumber in Blue"*.
-- One deliberate, documented deviation: the global film-grain overlay opacity is
-  `0.04` instead of the spec's `0.015`. At `0.015` with `mix-blend-mode: overlay`
-  on a near-black background the grain is effectively invisible; `0.04` keeps it
-  "极淡" while remaining perceptible as the intended tactile film texture.
-
----
-
-© 2026 Asada Yuki · Slime's Home
+文章可直接在 GitHub 编辑或删除。Pages 会随 `main` 提交重新构建，Git 历史保留旧版本。
