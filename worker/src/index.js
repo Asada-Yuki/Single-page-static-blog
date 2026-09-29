@@ -231,17 +231,23 @@ async function github(path, env, method = 'GET', body) {
     },
     ...(body ? { body: JSON.stringify(body) } : {})
   });
+  const responseText = await response.text();
   let data = {};
   try {
-    data = await response.json();
+    data = JSON.parse(responseText);
   } catch {
-    // The status remains enough to report a safe error to the author.
+    // Some upstream errors return plain text or HTML instead of JSON.
   }
   if (!response.ok) {
     const error = new Error('GitHub API request failed.');
     error.status = response.status;
     error.endpoint = `${method} ${path}`;
-    error.githubMessage = typeof data.message === 'string' ? data.message.slice(0, 200) : '';
+    const reason = typeof data.message === 'string' ? data.message :
+      typeof data.error === 'string' ? data.error : responseText;
+    error.githubMessage = reason.replaceAll(env.GITHUB_TOKEN, '[redacted]').replace(/\s+/g, ' ').slice(0, 180);
+    error.githubRequestId = response.headers.get('x-github-request-id') || '';
+    error.acceptedPermissions = response.headers.get('x-accepted-github-permissions') || '';
+    error.responseType = response.headers.get('content-type') || '';
     throw error;
   }
   return data;
@@ -328,8 +334,8 @@ function errorResponse(error) {
   if (error instanceof HttpError) return json({ error: error.message }, error.status);
   if (error && Number.isInteger(error.status)) {
     if (error.status === 409 || error.status === 422) return json({ error: 'The timeline changed during publishing. Press Publish again.' }, 409);
-    console.error('GitHub publishing failed', error.status, error.endpoint, error.githubMessage);
-    const detail = [error.endpoint, error.githubMessage].filter(Boolean).join(': ');
+    console.error('GitHub publishing failed', error.status, error.endpoint, error.githubMessage, error.githubRequestId);
+    const detail = [error.endpoint, error.githubMessage, error.acceptedPermissions && `required ${error.acceptedPermissions}`, error.githubRequestId && `GitHub request ${error.githubRequestId}`, error.responseType && `type ${error.responseType}`].filter(Boolean).join('; ');
     return json({ error: `GitHub rejected publishing (${error.status})${detail ? ` at ${detail}` : ''}.` }, 502);
   }
   console.error('Worker request failed.');
