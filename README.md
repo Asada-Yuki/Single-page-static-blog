@@ -50,7 +50,9 @@ npx wrangler@4 secret put GITHUB_TOKEN
 npx wrangler@4 deploy
 ```
 
-GitHub token 只需对此仓库的 `Contents: Read and write` 权限。不要提交 `AUTHOR_KEY` 或 `GITHUB_TOKEN`。部署后为 Worker 绑定作者域名，作者入口是 `/write`。
+GitHub token 只需对此仓库的 `Contents: Read and write` 权限。不要提交 `AUTHOR_KEY` 或 `GITHUB_TOKEN`。Worker 路由把 `https://www.yuki.art/write` 和 `https://yuki.art/write` 设为作者入口；`/api/*` 和写作页资源也交给 Worker。公开时间流仍由 Pages 提供。
+
+日常发布只需打开 `/write` 并输入作者密钥。终端只用于部署、更新或更换密钥。
 
 会话 Cookie 为 `HttpOnly`、`Secure`、`SameSite=Strict`，有效期 180 天。更换 `AUTHOR_KEY` 会使现有会话失效。
 
