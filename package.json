@@ -3,8 +3,10 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "prebuild": "npm run build:worker-assets",
+    "build:worker-assets": "node worker/build-inline-assets.mjs",
     "build": "node build.mjs",
-    "test": "node --test"
+    "test": "npm run build:worker-assets && node --test"
   },
   "dependencies": {
     "markdown-it": "15.0.2"

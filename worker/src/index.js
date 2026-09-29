@@ -1,3 +1,5 @@
+import WRITER_ASSETS from './writer-assets.js';
+
 const SESSION_SECONDS = 180 * 24 * 60 * 60;
 const MAX_REQUEST_BYTES = 8 * 1024 * 1024;
 const MAX_BODY_CHARS = 100_000;
@@ -365,6 +367,15 @@ async function handlePublish(request, env) {
 }
 
 async function serveWriterAsset(request, env, pathname) {
+  const embeddedAsset = WRITER_ASSETS[pathname];
+  if (embeddedAsset) {
+    const body = request.method === 'HEAD' ? null : embeddedAsset.body;
+    const response = new Response(body, {
+      headers: { 'Content-Type': embeddedAsset.contentType }
+    });
+    return withWriterHeaders(response);
+  }
+
   const url = new URL(request.url);
   url.pathname = pathname;
   const assetRequest = new Request(url, request);
@@ -404,6 +415,7 @@ export default {
       if (pathname.startsWith('/api/')) return json({ error: 'Not found.' }, 404);
       if (request.method !== 'GET' && request.method !== 'HEAD') return json({ error: 'Method not allowed.' }, 405);
       if (pathname === '/' || pathname === '/write') return await serveWriterAsset(request, env, '/write.html');
+      if (WRITER_ASSETS[pathname]) return await serveWriterAsset(request, env, pathname);
       return withWriterHeaders(await env.ASSETS.fetch(request));
     } catch (error) {
       return errorResponse(error);

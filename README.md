@@ -13,6 +13,7 @@
 - 图片可以填写替代文字，供读屏软件描述图片；空白时使用通用替代文字。
 - 页脚保持一行，只放版权、UTC 说明、RSS 与回到顶部。
 - Cloudflare Worker 的 `/write` 提供私有作者入口，并将正文和图片作为一个 GitHub commit 发布。
+- Worker 写作页的 HTML、CSS 和 JavaScript 会从 `worker/public/` 生成到 `worker/src/writer-assets.js`，因此线上编辑器部署与 Wrangler 部署都能发布同一版后台界面。
 - 草稿文字只保存在当前浏览器，可从写作页清除；图片文件不保存在草稿中。图片重新选择后需重新添加说明。
 - 登录接口按客户端 IP 限制每分钟 10 次尝试。Cloudflare Worker 的限速状态按边缘位置近似计数，不是严格的全球计量；详见 [Cloudflare Rate Limiting 文档](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/)。
 - 此仓库可公开读取；推送到仓库的文章、图片和 Git 历史也会公开。不要把草稿、密钥或私人资料推送到仓库。
@@ -25,7 +26,7 @@ npm run build
 npm test
 ```
 
-`npm test` 会检查构建输出，并使用模拟 GitHub API 检查 Worker 登录限速、会话与发布流程。构建输出在 `dist/`。本地预览：
+`npm run build` 会先同步 Worker 写作页资源，再构建静态站点。`npm test` 会检查构建输出、Worker 资源与登录限速、会话和发布流程。构建输出在 `dist/`。本地预览：
 
 ```sh
 python3 -m http.server 8080 --directory dist

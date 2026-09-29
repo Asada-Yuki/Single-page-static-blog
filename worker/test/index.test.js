@@ -58,10 +58,22 @@ test('login is rate limited and fails closed when the binding is missing', async
 test('writer headers, origin checks, session cookie, and GitHub publishing', async () => {
   const writerPage = await worker.fetch(makeRequest('/write'), env);
   assert.equal(writerPage.status, 200);
+  assert.equal(writerPage.headers.get('Content-Type'), 'text/html; charset=utf-8');
   assert.match(writerPage.headers.get('Content-Security-Policy'), /default-src 'self'/);
   assert.equal(writerPage.headers.get('X-Robots-Tag'), 'noindex, nofollow, noarchive');
   assert.equal(writerPage.headers.get('Permissions-Policy'), 'camera=(), microphone=(), geolocation=()');
   assert.equal(writerPage.headers.get('Cache-Control'), 'no-store');
+  assert.match(await writerPage.text(), /clear-draft-button/);
+
+  const writerScript = await worker.fetch(makeRequest('/write.js'), env);
+  assert.equal(writerScript.status, 200);
+  assert.equal(writerScript.headers.get('Content-Type'), 'text/javascript; charset=utf-8');
+  assert.match(await writerScript.text(), /Pages will rebuild automatically/);
+
+  const writerStyles = await worker.fetch(makeRequest('/write.css'), env);
+  assert.equal(writerStyles.status, 200);
+  assert.equal(writerStyles.headers.get('Content-Type'), 'text/css; charset=utf-8');
+  assert.match(await writerStyles.text(), /clear-draft-button/);
 
   const foreignOriginLogin = await worker.fetch(makeRequest('/api/login', {
     method: 'POST',
