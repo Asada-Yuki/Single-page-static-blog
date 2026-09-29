@@ -43,6 +43,14 @@ body {
   text-transform: uppercase;
 }
 
+.timeline-empty {
+  margin: -38px 0 0;
+  color: var(--muted);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 13px;
+  letter-spacing: 0.025em;
+}
+
 .day + .day {
   margin-top: 76px;
 }
@@ -171,6 +179,10 @@ body {
 
   .site-header {
     margin-bottom: 54px;
+  }
+
+  .timeline-empty {
+    margin-top: -26px;
   }
 
   .day + .day {

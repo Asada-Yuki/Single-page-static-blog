@@ -166,6 +166,10 @@ function formatUtcTime(iso) {
 }
 
 function renderTimeline(posts) {
+  if (posts.length === 0) {
+    return '<p class="timeline-empty" role="status">No entries yet. Dates and times are UTC.</p>';
+  }
+
   const groups = new Map();
   for (const post of posts) {
     const date = post.iso.slice(0, 10);
