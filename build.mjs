@@ -167,6 +167,58 @@ function formatUtcTime(iso) {
   return `${time} UTC`;
 }
 
+function formatUtcShortDate(iso) {
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'UTC',
+    day: '2-digit',
+    month: 'short'
+  }).format(new Date(iso)).toUpperCase();
+}
+
+function entryId(post) {
+  return `entry-${post.path.replace(/\.md$/, '').replace(/[^A-Za-z0-9_-]+/g, '-')}`;
+}
+
+function previewText(body) {
+  const plainText = body
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/https?:\/\/\S+/g, '')
+    .replace(/^\s{0,3}(?:#{1,6}\s+|>+\s?)/gm, '')
+    .replace(/[`*_~]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const characters = Array.from(plainText || '媒体内容');
+  return characters.length > 100 ? `${characters.slice(0, 100).join('')}…` : characters.join('');
+}
+
+function renderQuickBrowse(posts) {
+  if (posts.length === 0) return '';
+
+  const links = posts.slice(0, 8).map((post) => {
+    const dateTime = `${formatUtcShortDate(post.iso)} · ${formatUtcTime(post.iso)}`;
+    const preview = previewText(post.body);
+    return `
+      <li class="quick-browse__item">
+        <a class="quick-browse__link" href="#${entryId(post)}" aria-label="${escapeHtml(`${dateTime}: ${preview}`)}">
+          <span class="quick-browse__mark" aria-hidden="true"></span>
+          <span class="quick-browse__mobile-label" aria-hidden="true">${formatUtcTime(post.iso).replace(' UTC', '')}</span>
+          <span class="quick-browse__preview" aria-hidden="true">
+            <span class="quick-browse__meta">${dateTime}</span>
+            <span class="quick-browse__excerpt">${escapeHtml(preview)}</span>
+          </span>
+        </a>
+      </li>`;
+  }).join('\n');
+
+  return `
+    <nav class="quick-browse" aria-label="快速浏览最近内容">
+      <ol class="quick-browse__list">
+        ${links}
+      </ol>
+    </nav>`;
+}
+
 function renderTimeline(posts) {
   if (posts.length === 0) {
     return '<p class="timeline-empty" role="status">No entries yet. Dates and times are UTC.</p>';
@@ -182,7 +234,7 @@ function renderTimeline(posts) {
   return [...groups.entries()].map(([date, entries]) => {
     const dateTime = `${date}T00:00:00.000Z`;
     const renderedEntries = entries.map((post) => `
-      <article class="entry">
+      <article class="entry" id="${entryId(post)}">
         <time class="entry-time" datetime="${escapeHtml(post.iso)}">${formatUtcTime(post.iso)}</time>
         <div class="entry-content">${md.render(post.body)}</div>
       </article>`).join('\n');
@@ -204,12 +256,14 @@ async function main() {
   const template = await readFile(join(root, 'src', 'template.html'), 'utf8');
   const html = template
     .replaceAll('{{SITE_NAME}}', escapeHtml(site.name.trim()))
+    .replace('{{QUICK_BROWSE}}', renderQuickBrowse(posts))
     .replace('{{TIMELINE}}', renderTimeline(posts));
 
   await rm(distRoot, { recursive: true, force: true });
   await mkdir(distRoot, { recursive: true });
   await writeFile(join(distRoot, 'index.html'), html);
   await cp(join(root, 'src', 'style.css'), join(distRoot, 'style.css'));
+  await cp(join(root, 'src', 'image-viewer.js'), join(distRoot, 'image-viewer.js'));
   await cp(publicRoot, distRoot, {
     recursive: true,
     filter: (path) => !path.endsWith('.gitkeep')
