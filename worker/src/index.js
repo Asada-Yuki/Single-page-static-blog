@@ -240,6 +240,8 @@ async function github(path, env, method = 'GET', body) {
   if (!response.ok) {
     const error = new Error('GitHub API request failed.');
     error.status = response.status;
+    error.endpoint = `${method} ${path}`;
+    error.githubMessage = typeof data.message === 'string' ? data.message.slice(0, 200) : '';
     throw error;
   }
   return data;
@@ -326,8 +328,9 @@ function errorResponse(error) {
   if (error instanceof HttpError) return json({ error: error.message }, error.status);
   if (error && Number.isInteger(error.status)) {
     if (error.status === 409 || error.status === 422) return json({ error: 'The timeline changed during publishing. Press Publish again.' }, 409);
-    console.error('GitHub publishing failed with status', error.status);
-    return json({ error: `GitHub rejected publishing (${error.status}). Check the token and repository settings.` }, 502);
+    console.error('GitHub publishing failed', error.status, error.endpoint, error.githubMessage);
+    const detail = [error.endpoint, error.githubMessage].filter(Boolean).join(': ');
+    return json({ error: `GitHub rejected publishing (${error.status})${detail ? ` at ${detail}` : ''}.` }, 502);
   }
   console.error('Worker request failed.');
   return json({ error: 'Request failed. The draft is still here.' }, 500);
