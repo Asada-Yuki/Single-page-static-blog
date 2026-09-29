@@ -62,7 +62,7 @@ GitHub token 只需对此仓库的 `Contents: Read and write` 权限。不要提
 每次发布生成一个 Markdown 文件，例如：
 
 ```text
-content/2026/09/2026-09-27T15-34-03.123Z-a1b2c3d4.md
+content/2026/09/2026-09-27T15-34-03.123Z-a1b2c3d4e5f60718293a4b5c6d7e8f90.md
 ```
 
 文件名使用 ISO 8601 UTC，冒号替换为连字符。页面日期、时间和排序全部使用 UTC。正文没有 Front Matter；短句、长文、图片和视频链接都使用同一种记录格式。

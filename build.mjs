@@ -7,7 +7,7 @@ const root = dirname(fileURLToPath(import.meta.url));
 const contentRoot = join(root, 'content');
 const publicRoot = join(root, 'public');
 const distRoot = join(root, 'dist');
-const timestampPattern = /^(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}\.\d{3}Z)(?:-[a-f0-9]{8})?\.md$/;
+const timestampPattern = /^(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}\.\d{3}Z)(?:-[a-f0-9]{8}|-[a-f0-9]{32})?\.md$/;
 
 function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, (char) => ({
