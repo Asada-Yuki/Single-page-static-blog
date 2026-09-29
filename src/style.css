@@ -35,12 +35,12 @@ body {
 
 .site-header {
   margin: 0 0 68px;
-  color: var(--ink);
-  font-size: 15px;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  line-height: 1.4;
-  text-transform: uppercase;
+}
+
+.site-logo {
+  display: block;
+  width: min(180px, 55vw);
+  height: auto;
 }
 
 .timeline-empty {
