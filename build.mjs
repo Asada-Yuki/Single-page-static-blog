@@ -176,6 +176,16 @@ function formatUtcShortDate(iso) {
   }).format(new Date(iso)).toUpperCase();
 }
 
+function fillTemplate(template, values, name) {
+  let output = template;
+  for (const [key, value] of Object.entries(values)) {
+    output = output.replaceAll(`{{${key}}}`, () => value);
+  }
+  const unresolved = output.match(/\{\{[A-Z_]+\}\}/);
+  if (unresolved) throw new Error(`${name} contains an unresolved template value: ${unresolved[0]}`);
+  return output;
+}
+
 function entryId(post) {
   return `entry-${post.path.replace(/\.md$/, '').replace(/[^A-Za-z0-9_-]+/g, '-')}`;
 }
@@ -203,9 +213,9 @@ function renderQuickBrowse(posts) {
       <li class="quick-browse__item">
         <a class="quick-browse__link" href="#${entryId(post)}" aria-label="${escapeHtml(`${dateTime}: ${preview}`)}">
           <span class="quick-browse__mark" aria-hidden="true"></span>
-          <span class="quick-browse__mobile-label" aria-hidden="true">${formatUtcTime(post.iso).replace(' UTC', '')}</span>
+          <span class="quick-browse__mobile-label" lang="en" aria-hidden="true">${formatUtcTime(post.iso).replace(' UTC', '')}</span>
           <span class="quick-browse__preview" aria-hidden="true">
-            <span class="quick-browse__meta">${dateTime}</span>
+            <span class="quick-browse__meta" lang="en">${dateTime}</span>
             <span class="quick-browse__excerpt">${escapeHtml(preview)}</span>
           </span>
         </a>
@@ -222,7 +232,7 @@ function renderQuickBrowse(posts) {
 
 function renderTimeline(posts) {
   if (posts.length === 0) {
-    return '<p class="timeline-empty" role="status">No entries yet. Dates and times are UTC.</p>';
+    return '<p class="timeline-empty" role="status">暂时还没有内容。所有时间均为 UTC。</p>';
   }
 
   const groups = new Map();
@@ -236,44 +246,122 @@ function renderTimeline(posts) {
     const dateTime = `${date}T00:00:00.000Z`;
     const renderedEntries = entries.map((post) => `
       <article class="entry" id="${entryId(post)}">
-        <time class="entry-time" datetime="${escapeHtml(post.iso)}">${formatUtcTime(post.iso)}</time>
+        <time class="entry-time" lang="en" datetime="${escapeHtml(post.iso)}">${formatUtcTime(post.iso)}</time>
         <div class="entry-content">${md.render(post.body)}</div>
       </article>`).join('\n');
     return `
       <section class="day" aria-label="${formatUtcDate(dateTime)}">
-        <time class="day-date" datetime="${date}T00:00:00Z">${formatUtcDate(dateTime)}</time>
+      <time class="day-date" lang="en" datetime="${date}T00:00:00Z">${formatUtcDate(dateTime)}</time>
         ${renderedEntries}
       </section>`;
   }).join('\n');
 }
 
+function renderFeed(posts, site, siteUrl) {
+  const items = posts.slice(0, 20).map((post) => {
+    const link = `${siteUrl}/#${entryId(post)}`;
+    const title = `${post.iso.slice(0, 10)} · ${formatUtcTime(post.iso)}`;
+    return `
+    <item>
+      <title>${escapeHtml(title)}</title>
+      <link>${escapeHtml(link)}</link>
+      <guid isPermaLink="true">${escapeHtml(link)}</guid>
+      <pubDate>${new Date(post.iso).toUTCString()}</pubDate>
+      <description>${escapeHtml(previewText(post.body))}</description>
+    </item>`;
+  }).join('');
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>${escapeHtml(site.name)}</title>
+    <link>${escapeHtml(`${siteUrl}/`)}</link>
+    <description>${escapeHtml(site.description)}</description>
+    <language>${escapeHtml(site.lang)}</language>${items}
+  </channel>
+</rss>
+`;
+}
+
+function renderSitemap(posts, siteUrl) {
+  const lastModified = posts[0] ? `\n    <lastmod>${posts[0].iso}</lastmod>` : '';
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>${escapeHtml(`${siteUrl}/`)}</loc>${lastModified}
+  </url>
+</urlset>
+`;
+}
+
 async function main() {
   const site = JSON.parse(await readFile(join(root, 'site.json'), 'utf8'));
   if (typeof site.name !== 'string' || !site.name.trim()) throw new Error('site.json must contain a non-empty name.');
+  if (typeof site.url !== 'string' || !site.url.trim()) throw new Error('site.json must contain a canonical HTTPS url.');
+  if (typeof site.lang !== 'string' || !/^[a-z]{2}(?:-[A-Za-z0-9]+)*$/.test(site.lang.trim())) {
+    throw new Error('site.json must contain a valid language tag.');
+  }
+  if (typeof site.description !== 'string' || !site.description.trim()) {
+    throw new Error('site.json must contain a non-empty description.');
+  }
+
+  let configuredUrl;
+  try {
+    configuredUrl = new URL(site.url.trim());
+  } catch {
+    throw new Error('site.json url must be a valid HTTPS origin.');
+  }
+  if (configuredUrl.protocol !== 'https:' || configuredUrl.username || configuredUrl.password
+    || configuredUrl.pathname !== '/' || configuredUrl.search || configuredUrl.hash) {
+    throw new Error('site.json url must be an HTTPS origin without a path, query, or fragment.');
+  }
+  const siteUrl = configuredUrl.origin;
 
   const posts = await collectPosts(contentRoot);
   posts.sort((a, b) => b.iso.localeCompare(a.iso) || b.path.localeCompare(a.path));
 
   const template = await readFile(join(root, 'src', 'template.html'), 'utf8');
+  const notFoundTemplate = await readFile(join(root, 'src', '404.html'), 'utf8');
   const stylesheet = await readFile(join(root, 'src', 'style.css'), 'utf8');
   const imageViewer = await readFile(join(root, 'src', 'image-viewer.js'), 'utf8');
+  const quickBrowse = await readFile(join(root, 'src', 'quick-browse.js'), 'utf8');
   const versionOf = (content) => createHash('sha256').update(content).digest('hex').slice(0, 12);
-  const html = template
-    .replaceAll('{{SITE_NAME}}', escapeHtml(site.name.trim()))
-    .replace('{{STYLE_VERSION}}', versionOf(stylesheet))
-    .replace('{{IMAGE_VIEWER_VERSION}}', versionOf(imageViewer))
-    .replace('{{QUICK_BROWSE}}', renderQuickBrowse(posts))
-    .replace('{{TIMELINE}}', renderTimeline(posts));
+  const siteName = escapeHtml(site.name.trim());
+  const siteDescription = escapeHtml(site.description.trim());
+  const siteLang = escapeHtml(site.lang.trim());
+  const templateValues = {
+    SITE_NAME: siteName,
+    SITE_DESCRIPTION: siteDescription,
+    SITE_LANG: siteLang,
+    SITE_URL: escapeHtml(siteUrl),
+    YEAR: String(new Date().getUTCFullYear()),
+    STYLE_VERSION: versionOf(stylesheet),
+    IMAGE_VIEWER_VERSION: versionOf(imageViewer),
+    QUICK_BROWSE_VERSION: versionOf(quickBrowse),
+    QUICK_BROWSE: renderQuickBrowse(posts),
+    TIMELINE: renderTimeline(posts)
+  };
+  const html = fillTemplate(template, templateValues, 'src/template.html');
+  const notFoundHtml = fillTemplate(notFoundTemplate, templateValues, 'src/404.html');
 
   await rm(distRoot, { recursive: true, force: true });
   await mkdir(distRoot, { recursive: true });
   await writeFile(join(distRoot, 'index.html'), html);
+  await writeFile(join(distRoot, '404.html'), notFoundHtml);
   await writeFile(join(distRoot, 'style.css'), stylesheet);
   await writeFile(join(distRoot, 'image-viewer.js'), imageViewer);
+  await writeFile(join(distRoot, 'quick-browse.js'), quickBrowse);
   await cp(publicRoot, distRoot, {
     recursive: true,
     filter: (path) => !path.endsWith('.gitkeep')
   });
+  await writeFile(join(distRoot, 'robots.txt'), `User-agent: *\nAllow: /\nDisallow: /write\nDisallow: /api/\n\nSitemap: ${siteUrl}/sitemap.xml\n`);
+  await writeFile(join(distRoot, 'sitemap.xml'), renderSitemap(posts, siteUrl));
+  await writeFile(join(distRoot, 'feed.xml'), renderFeed(posts, {
+    name: site.name.trim(),
+    description: site.description.trim(),
+    lang: site.lang.trim()
+  }, siteUrl));
 
   const htmlSize = Buffer.byteLength(html);
   if (posts.length > 5000 || htmlSize > 5 * 1024 * 1024) {

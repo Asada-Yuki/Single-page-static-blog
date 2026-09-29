@@ -1,6 +1,7 @@
 const SESSION_SECONDS = 180 * 24 * 60 * 60;
 const MAX_REQUEST_BYTES = 8 * 1024 * 1024;
 const MAX_BODY_CHARS = 100_000;
+const MAX_ALT_CHARS = 250;
 const MAX_IMAGES = 5;
 const MAX_IMAGE_BYTES = 1024 * 1024;
 const UUID_PATTERN = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
@@ -153,6 +154,18 @@ function assertConfiguration(env) {
 async function handleLogin(request, env) {
   if (!sameOrigin(request)) throw new HttpError(403, 'Request origin was rejected.');
   assertConfiguration(env);
+  if (!env.AUTHOR_LOGIN_LIMITER || typeof env.AUTHOR_LOGIN_LIMITER.limit !== 'function') {
+    throw new HttpError(503, 'Login protection is not configured.');
+  }
+  let loginAllowance;
+  try {
+    const clientAddress = request.headers.get('CF-Connecting-IP')?.trim() || 'unknown';
+    loginAllowance = await env.AUTHOR_LOGIN_LIMITER.limit({ key: `author-login:${clientAddress}` });
+  } catch {
+    throw new HttpError(503, 'Login protection is temporarily unavailable.');
+  }
+  if (!loginAllowance?.success) throw new HttpError(429, 'Too many login attempts. Wait a minute and try again.');
+
   const payload = await readRequestJson(request, 2048);
   const candidate = typeof payload.authorKey === 'string' ? payload.authorKey : '';
   if (candidate.length < 32 || candidate.length > 256) throw new HttpError(401, 'The author key was not accepted.');
@@ -193,6 +206,15 @@ function decodeWebp(base64) {
   return binary.length;
 }
 
+function escapeMarkdownAlt(value) {
+  return String(value)
+    .replace(/[\r\n\t]+/g, ' ')
+    .replace(/\\/g, '\\\\')
+    .replace(/\[/g, '\\[')
+    .replace(/\]/g, '\\]')
+    .trim();
+}
+
 function validatePost(payload) {
   if (!payload || typeof payload.body !== 'string' || payload.body.length > MAX_BODY_CHARS) {
     throw new HttpError(400, 'Post text must be 100,000 characters or less.');
@@ -207,6 +229,9 @@ function validatePost(payload) {
   for (const image of payload.images) {
     if (!image || typeof image.id !== 'string' || !UUID_PATTERN.test(image.id) || imageIds.has(image.id.toLowerCase())) {
       throw new HttpError(400, 'An image reference is invalid.');
+    }
+    if (image.alt !== undefined && (typeof image.alt !== 'string' || Array.from(image.alt).length > MAX_ALT_CHARS)) {
+      throw new HttpError(400, 'Image descriptions must be 250 characters or less.');
     }
     const bytes = decodeWebp(image.data);
     totalBytes += bytes;
@@ -285,14 +310,19 @@ async function createPost(payload, env) {
     const blob = await createBlob(image.data, 'base64', env);
     imageEntries.push({
       id: image.id.toLowerCase(),
+      alt: typeof image.alt === 'string' ? image.alt : 'Photo',
       path: `public/images/${folder}/${filename}`,
       publicPath: `/images/${folder}/${filename}`,
       sha: blob.sha
     });
   }
 
-  const imagePaths = new Map(imageEntries.map((image) => [image.id, image.publicPath]));
-  const markdown = payload.body.replace(IMAGE_MARKER_PATTERN, (_match, id) => `![Photo](${imagePaths.get(id.toLowerCase())})`);
+  const imagesById = new Map(imageEntries.map((image) => [image.id, image]));
+  const markdown = payload.body.replace(IMAGE_MARKER_PATTERN, (_match, id) => {
+    const image = imagesById.get(id.toLowerCase());
+    const description = escapeMarkdownAlt(image.alt || '图片');
+    return `![${description}](${image.publicPath})`;
+  });
   const postPath = `content/${folder}/${timestamp}-${suffix}.md`;
   const markdownBlob = await createBlob(markdown, 'utf-8', env);
   const treeEntries = [
@@ -331,7 +361,7 @@ async function handlePublish(request, env) {
   if (!await hasSession(request, env.AUTHOR_KEY)) throw new HttpError(401, 'Your session has expired.');
   const payload = await readRequestJson(request, MAX_REQUEST_BYTES);
   const result = await createPost(payload, env);
-  return json({ ok: true, timestamp: result.timestamp });
+  return json({ ok: true, timestamp: result.timestamp, commit: result.commit });
 }
 
 async function serveWriterAsset(request, env, pathname) {
@@ -342,7 +372,10 @@ async function serveWriterAsset(request, env, pathname) {
 }
 
 function errorResponse(error) {
-  if (error instanceof HttpError) return json({ error: error.message }, error.status);
+  if (error instanceof HttpError) {
+    const headers = error.status === 429 ? { 'Retry-After': '60' } : {};
+    return json({ error: error.message }, error.status, headers);
+  }
   if (error && Number.isInteger(error.status)) {
     if (error.status === 409 || error.status === 422) return json({ error: 'The timeline changed during publishing. Press Publish again.' }, 409);
     console.error('GitHub publishing failed', error.status, error.endpoint, error.githubMessage, error.githubRequestId);

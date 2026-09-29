@@ -7,9 +7,14 @@
 - 页面是单一连续时间流，按 UTC 从新到旧排列。
 - 桌面侧栏预览最近 8 条；窄屏底栏显示最近 5 条并跳到对应内容。主时间流始终连续，靠上下滚动浏览，没有分页。
 - 正文、图片与外部视频链接构成每条记录；没有标签、分类、评论、搜索、分页或归档。
-- 构建生成静态 `dist/index.html`；只有图片全屏查看器使用少量前端 JavaScript，其余页面内容在构建时生成。
+- 构建生成静态首页、404 页面、RSS、站点地图和爬虫规则；公开页面只有一个连续时间流。
+- 侧栏会标记当前阅读位置。只有图片查看器和侧栏位置提示使用少量前端 JavaScript，其余页面内容在构建时生成。
 - 点击文章图片可打开全屏查看器；多图文章可用左右按钮或键盘方向键切换，按 Esc 关闭。
+- 图片可以填写替代文字，供读屏软件描述图片；空白时使用通用替代文字。
+- 页脚保持一行，只放版权、UTC 说明、RSS 与回到顶部。
 - Cloudflare Worker 的 `/write` 提供私有作者入口，并将正文和图片作为一个 GitHub commit 发布。
+- 草稿文字只保存在当前浏览器，可从写作页清除；图片文件不保存在草稿中。图片重新选择后需重新添加说明。
+- 登录接口按客户端 IP 限制每分钟 10 次尝试。Cloudflare Worker 的限速状态按边缘位置近似计数，不是严格的全球计量；详见 [Cloudflare Rate Limiting 文档](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/)。
 - 此仓库可公开读取；推送到仓库的文章、图片和 Git 历史也会公开。不要把草稿、密钥或私人资料推送到仓库。
 
 ## 本地构建
@@ -20,7 +25,7 @@ npm run build
 npm test
 ```
 
-`npm test` 使用模拟 GitHub API 检查 Worker 登录、会话与发布流程。构建输出在 `dist/`。本地预览：
+`npm test` 会检查构建输出，并使用模拟 GitHub API 检查 Worker 登录限速、会话与发布流程。构建输出在 `dist/`。本地预览：
 
 ```sh
 python3 -m http.server 8080 --directory dist
@@ -58,6 +63,8 @@ GitHub token 只需对此仓库的 `Contents: Read and write` 权限。不要提
 日常发布只需打开 `/write` 并输入作者密钥。终端只用于部署、更新或更换密钥。
 
 会话 Cookie 为 `HttpOnly`、`Secure`、`SameSite=Strict`，有效期 180 天。更换 `AUTHOR_KEY` 会使现有会话失效。
+
+登录 Worker 绑定了 Cloudflare 原生限速，需要 Wrangler 4.36.0 或更新版本。当前规则是每个客户端 IP 每 60 秒最多 10 次登录尝试；限速器失效或未配置时，登录会暂停，而不是跳过保护。该限速按 Cloudflare 边缘位置近似工作，不应用于严格的全局计数。
 
 ## UTC 内容格式
 

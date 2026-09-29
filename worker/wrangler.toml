@@ -24,6 +24,14 @@ GITHUB_OWNER = "Asada-Yuki"
 GITHUB_REPO = "Single-page-static-blog"
 GITHUB_BRANCH = "main"
 
+[[ratelimits]]
+name = "AUTHOR_LOGIN_LIMITER"
+namespace_id = "917203641"
+
+  [ratelimits.simple]
+  limit = 10
+  period = 60
+
 [assets]
 directory = "./public"
 binding = "ASSETS"

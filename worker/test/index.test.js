@@ -3,8 +3,15 @@ import test from 'node:test';
 import worker from '../src/index.js';
 
 const origin = 'https://blog.example';
+const loginLimitKeys = [];
 const env = {
   AUTHOR_KEY: 'a'.repeat(64),
+  AUTHOR_LOGIN_LIMITER: {
+    async limit({ key }) {
+      loginLimitKeys.push(key);
+      return { success: true };
+    }
+  },
   GITHUB_OWNER: 'Asada-Yuki',
   GITHUB_REPO: 'Single-page-static-blog',
   GITHUB_BRANCH: 'main',
@@ -27,6 +34,26 @@ function makeRequest(path, { method = 'GET', body, requestOrigin = origin, cooki
     ...(body !== undefined ? { body: JSON.stringify(body) } : {})
   });
 }
+
+test('login is rate limited and fails closed when the binding is missing', async () => {
+  const blocked = await worker.fetch(makeRequest('/api/login', {
+    method: 'POST',
+    body: { authorKey: env.AUTHOR_KEY }
+  }), {
+    ...env,
+    AUTHOR_LOGIN_LIMITER: { async limit({ key }) { loginLimitKeys.push(key); return { success: false }; } }
+  });
+  assert.equal(blocked.status, 429);
+  assert.equal(blocked.headers.get('Retry-After'), '60');
+  assert.match((await blocked.json()).error, /wait a minute/i);
+  assert.equal(loginLimitKeys.at(-1), 'author-login:unknown');
+
+  const unconfigured = await worker.fetch(makeRequest('/api/login', {
+    method: 'POST',
+    body: { authorKey: env.AUTHOR_KEY }
+  }), { ...env, AUTHOR_LOGIN_LIMITER: undefined });
+  assert.equal(unconfigured.status, 503);
+});
 
 test('writer headers, origin checks, session cookie, and GitHub publishing', async () => {
   const writerPage = await worker.fetch(makeRequest('/write'), env);
@@ -106,9 +133,25 @@ test('writer headers, origin checks, session cookie, and GitHub publishing', asy
   assert.equal(invalidTimestampPublish.status, 400);
   assert.equal(githubCalls, 0);
 
+  const imageId = '11111111-1111-4111-8111-111111111111';
+  const webpData = Buffer.from('RIFFxxxxWEBP').toString('base64');
+  const invalidAltPublish = await worker.fetch(makeRequest('/api/publish', {
+    method: 'POST',
+    cookie,
+    body: {
+      body: `A test post\n\n[[image:${imageId}]]`,
+      images: [{ id: imageId, data: webpData, alt: 'a'.repeat(251) }],
+      attemptId: attempt.id,
+      timestamp: attempt.timestamp
+    }
+  }), env);
+  assert.equal(invalidAltPublish.status, 400);
+  assert.equal(githubCalls, 0);
+
   const originalFetch = globalThis.fetch;
   const githubRequests = [];
   const postPaths = [];
+  const submittedBlobs = [];
   globalThis.fetch = async (input, init = {}) => {
     githubCalls += 1;
     const url = new URL(typeof input === 'string' ? input : input.url);
@@ -124,8 +167,7 @@ test('writer headers, origin checks, session cookie, and GitHub publishing', asy
     let data;
     if (method === 'POST' && path.endsWith('/git/blobs')) {
       const blob = JSON.parse(init.body);
-      assert.equal(blob.content, 'A test post');
-      assert.equal(blob.encoding, 'utf-8');
+      submittedBlobs.push(blob);
       data = { sha: 'blob-sha' };
     } else if (method === 'GET' && path.endsWith('/git/ref/heads/main')) {
       data = { object: { sha: 'parent-sha' } };
@@ -136,7 +178,7 @@ test('writer headers, origin checks, session cookie, and GitHub publishing', asy
       postPaths.push(tree.tree.find((entry) => entry.path.endsWith('.md')).path);
       data = { sha: 'tree-sha' };
     } else if (method === 'POST' && path.endsWith('/git/commits')) {
-      data = { sha: 'commit-sha' };
+      data = { sha: 'a'.repeat(40) };
     } else if (method === 'PATCH' && path.endsWith('/git/refs/heads/main')) {
       assert.equal(JSON.parse(init.body).force, false);
       data = {};
@@ -154,22 +196,37 @@ test('writer headers, origin checks, session cookie, and GitHub publishing', asy
     const publish = await worker.fetch(makeRequest('/api/publish', {
       method: 'POST',
       cookie,
-      body: { body: 'A test post', images: [], attemptId: attempt.id, timestamp: attempt.timestamp }
+      body: {
+        body: `A test post\n\n[[image:${imageId}]]`,
+        images: [{ id: imageId, data: webpData, alt: 'Yuki portrait' }],
+        attemptId: attempt.id,
+        timestamp: attempt.timestamp
+      }
     }), env);
     assert.equal(publish.status, 200);
     const result = await publish.json();
     assert.equal(result.ok, true);
     assert.equal(result.timestamp, attempt.timestamp);
-    assert.equal(githubRequests.length, 6);
+    assert.equal(result.commit, 'a'.repeat(40));
+    assert.equal(githubRequests.length, 7);
+    assert.equal(submittedBlobs[0].encoding, 'base64');
+    assert.match(submittedBlobs[1].content, /!\[Yuki portrait\]\(\/images\/\d{4}\/\d{2}\/.+\.webp\)/);
+    assert.equal(submittedBlobs[1].encoding, 'utf-8');
 
     const retriedPublish = await worker.fetch(makeRequest('/api/publish', {
       method: 'POST',
       cookie,
-      body: { body: 'A test post', images: [], attemptId: attempt.id, timestamp: attempt.timestamp }
+      body: {
+        body: `A test post\n\n[[image:${imageId}]]`,
+        images: [{ id: imageId, data: webpData, alt: 'Yuki portrait' }],
+        attemptId: attempt.id,
+        timestamp: attempt.timestamp
+      }
     }), env);
     assert.equal(retriedPublish.status, 200);
     assert.equal(postPaths.length, 2);
     assert.equal(postPaths[0], postPaths[1]);
+    assert.equal((await retriedPublish.json()).commit, 'a'.repeat(40));
   } finally {
     globalThis.fetch = originalFetch;
   }

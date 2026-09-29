@@ -1,22 +1,42 @@
 <!doctype html>
-<html lang="en">
+<html lang="{{SITE_LANG}}">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light">
-    <title>{{SITE_NAME}}</title>
+    <meta name="description" content="{{SITE_DESCRIPTION}}">
+    <link rel="canonical" href="{{SITE_URL}}/">
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <link rel="alternate" type="application/rss+xml" title="{{SITE_NAME}} RSS" href="/feed.xml">
+    <meta property="og:type" content="website">
+    <meta property="og:locale" content="zh_CN">
+    <meta property="og:site_name" content="{{SITE_NAME}}">
+    <meta property="og:title" content="{{SITE_NAME}} · 个人时间流">
+    <meta property="og:description" content="{{SITE_DESCRIPTION}}">
+    <meta property="og:url" content="{{SITE_URL}}/">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="{{SITE_NAME}} · 个人时间流">
+    <meta name="twitter:description" content="{{SITE_DESCRIPTION}}">
+    <title>{{SITE_NAME}} · 个人时间流</title>
     <link rel="stylesheet" href="/style.css?v={{STYLE_VERSION}}">
   </head>
   <body>
     <a class="skip-link" href="#timeline-content">跳到内容</a>
     {{QUICK_BROWSE}}
     <main class="timeline-shell" id="timeline-content">
-      <header class="site-header">
-        <img class="site-logo" src="/logo.svg" alt="{{SITE_NAME}}" width="678" height="72" fetchpriority="high">
+      <header class="site-header" id="top">
+        <h1 class="visually-hidden">{{SITE_NAME}} · 个人时间流</h1>
+        <img class="site-logo" src="/logo.svg" alt="" width="678" height="72" fetchpriority="high">
       </header>
       <div class="timeline">
         {{TIMELINE}}
       </div>
+      <footer class="site-footer" aria-label="站点信息">
+        <span>© {{YEAR}} {{SITE_NAME}}</span>
+        <span>时间均为 UTC</span>
+        <a href="/feed.xml">RSS</a>
+        <a href="#top">↑ 回到顶部</a>
+      </footer>
     </main>
     <dialog class="image-viewer" aria-label="图片查看器">
       <div class="image-viewer__topbar">
@@ -36,5 +56,6 @@
       </button>
     </dialog>
     <script data-cfasync="false" type="module" src="/image-viewer.js?v={{IMAGE_VIEWER_VERSION}}"></script>
+    <script data-cfasync="false" type="module" src="/quick-browse.js?v={{QUICK_BROWSE_VERSION}}"></script>
   </body>
 </html>

@@ -2,7 +2,7 @@
   color-scheme: light;
   --paper: #f4f1e9;
   --ink: #191918;
-  --muted: #77736c;
+  --muted: #6d6962;
   font-family: "Iowan Old Style", "Palatino Linotype", "Songti SC", "Noto Serif CJK SC", Georgia, serif;
   background: var(--paper);
   color: var(--ink);
@@ -129,6 +129,11 @@ body {
   font-size: 12px;
 }
 
+.status a {
+  color: inherit;
+  text-underline-offset: 0.2em;
+}
+
 .editor-note {
   margin: 10px 0 0;
   color: var(--muted);
@@ -136,20 +141,37 @@ body {
   font-size: 12px;
 }
 
-.attachments {
+.editor-footer {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 14px;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.editor-footer .editor-note {
+  max-width: 460px;
+}
+
+.clear-draft-button {
+  flex: 0 0 auto;
+  min-height: 44px;
+  margin: 0;
+}
+
+.attachments {
+  display: grid;
+  gap: 12px;
   margin: 16px 0;
   font-family: ui-sans-serif, system-ui, sans-serif;
   font-size: 12px;
 }
 
 .attachment {
-  display: inline-flex;
+  display: grid;
+  width: 100%;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 7px;
+  gap: 12px;
 }
 
 .attachment img {
@@ -159,12 +181,39 @@ body {
 }
 
 .attachment button {
-  padding: 0;
+  min-height: 44px;
+  padding: 4px 0;
   border: 0;
   background: transparent;
   color: var(--muted);
   font: inherit;
   cursor: pointer;
+}
+
+.attachment__description {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.attachment__description input {
+  width: 100%;
+  min-height: 38px;
+  padding: 6px 8px;
+  border: 1px solid var(--muted);
+  border-radius: 3px;
+  outline: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+}
+
+.attachment__description input:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
 }
 
 .login-view {
@@ -221,5 +270,11 @@ body {
   .write-shell {
     width: calc(100% - 36px);
     padding-top: 22px;
+  }
+
+  .editor-footer {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
   }
 }

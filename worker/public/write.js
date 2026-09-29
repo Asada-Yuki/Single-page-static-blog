@@ -8,6 +8,7 @@ const imageInput = document.querySelector('#image-input');
 const photoButton = document.querySelector('#photo-button');
 const attachments = document.querySelector('#attachments');
 const publishButton = document.querySelector('#publish-button');
+const clearDraftButton = document.querySelector('#clear-draft-button');
 const loginButton = document.querySelector('#login-button');
 const publishStatus = document.querySelector('#publish-status');
 const logoutButton = document.querySelector('#logout-button');
@@ -48,8 +49,14 @@ function setPublishing(publishing) {
   imageInput.disabled = publishing;
   photoButton.disabled = publishing;
   publishButton.disabled = publishing;
+  clearDraftButton.disabled = publishing || pendingImageCount > 0;
   logoutButton.disabled = publishing;
   for (const button of attachments.querySelectorAll('button')) button.disabled = publishing;
+  for (const input of attachments.querySelectorAll('input')) input.disabled = publishing;
+}
+
+function updateDraftClearState() {
+  clearDraftButton.disabled = editorForm.getAttribute('aria-busy') === 'true' || pendingImageCount > 0;
 }
 
 function isPublishAttempt(value) {
@@ -102,7 +109,7 @@ function restoreDraft() {
     postBody.value = '';
   }
   if (postBody.value.includes('[[image:')) {
-    publishStatus.textContent = 'This draft has image placeholders. Add those images again or remove the placeholders.';
+    publishStatus.textContent = 'This draft contains image markers, but image files are not stored here. Remove the old markers, select the images again, or clear the draft.';
   }
 }
 
@@ -131,6 +138,20 @@ function renderAttachments() {
     const preview = document.createElement('img');
     preview.src = image.previewUrl;
     preview.alt = `Selected image ${index}`;
+    const descriptionLabel = document.createElement('label');
+    descriptionLabel.className = 'attachment__description';
+    descriptionLabel.textContent = `Image description ${index} (optional)`;
+    const description = document.createElement('input');
+    description.type = 'text';
+    description.maxLength = 250;
+    description.autocomplete = 'off';
+    description.placeholder = 'Describe this image for screen readers';
+    description.value = image.alt;
+    description.disabled = editorForm.getAttribute('aria-busy') === 'true';
+    descriptionLabel.append(description);
+    description.addEventListener('input', () => {
+      image.alt = description.value;
+    });
     const remove = document.createElement('button');
     remove.type = 'button';
     remove.textContent = `Image ${index} ×`;
@@ -143,7 +164,7 @@ function renderAttachments() {
       renderAttachments();
       saveDraft();
     });
-    item.append(preview, remove);
+    item.append(preview, descriptionLabel, remove);
     attachments.append(item);
   }
 }
@@ -210,13 +231,14 @@ async function addFiles(fileList) {
 
   const selectedFiles = files.slice(0, room);
   pendingImageCount += selectedFiles.length;
+  updateDraftClearState();
   try {
     for (const file of selectedFiles) {
       try {
         const blob = await convertImage(file);
         const id = crypto.randomUUID();
         const marker = `[[image:${id}]]`;
-        const image = { id, marker, blob, previewUrl: URL.createObjectURL(blob) };
+        const image = { id, marker, blob, alt: '', previewUrl: URL.createObjectURL(blob) };
         images.set(id, image);
         insertAtCursor(marker);
         publishStatus.textContent = '';
@@ -225,6 +247,7 @@ async function addFiles(fileList) {
         publishStatus.textContent = error.message;
       } finally {
         pendingImageCount -= 1;
+        updateDraftClearState();
       }
     }
   } finally {
@@ -278,7 +301,8 @@ async function publish(event) {
       timestamp: attempt.timestamp,
       images: await Promise.all(selectedImages.map(async (image) => ({
         id: image.id,
-        data: await blobToBase64(image.blob)
+        data: await blobToBase64(image.blob),
+        alt: image.alt
       })))
     };
     const response = await fetch('/api/publish', {
@@ -307,7 +331,15 @@ async function publish(event) {
     } catch {
       // Publishing succeeded; the visible draft has already been cleared.
     }
-    publishStatus.textContent = `Published · ${result.timestamp} UTC`;
+    publishStatus.replaceChildren(document.createTextNode(`Committed to GitHub · ${result.timestamp} · Pages will rebuild automatically. `));
+    if (typeof result.commit === 'string' && /^[0-9a-f]{40}$/i.test(result.commit)) {
+      const commitLink = document.createElement('a');
+      commitLink.href = `https://github.com/Asada-Yuki/Single-page-static-blog/commit/${result.commit}`;
+      commitLink.target = '_blank';
+      commitLink.rel = 'noopener noreferrer';
+      commitLink.textContent = 'View commit';
+      publishStatus.append(commitLink);
+    }
   } catch (error) {
     publishStatus.textContent = `${error.message} The draft is still here.`;
   } finally {
@@ -356,6 +388,24 @@ loginForm.addEventListener('submit', async (event) => {
 });
 
 editorForm.addEventListener('submit', publish);
+clearDraftButton.addEventListener('click', () => {
+  if (editorForm.getAttribute('aria-busy') === 'true' || pendingImageCount > 0) return;
+  if (!window.confirm('Clear the draft text and selected images from this browser?')) return;
+
+  postBody.value = '';
+  for (const image of images.values()) URL.revokeObjectURL(image.previewUrl);
+  images.clear();
+  pendingAttempt = null;
+  try {
+    localStorage.removeItem(draftKey);
+    localStorage.removeItem(attemptKey);
+  } catch {
+    // The visible draft is cleared even if browser storage is unavailable.
+  }
+  renderAttachments();
+  publishStatus.textContent = 'Draft cleared from this browser.';
+  postBody.focus();
+});
 postBody.addEventListener('input', saveDraft);
 imageInput.addEventListener('change', async () => {
   await addFiles(imageInput.files || []);
