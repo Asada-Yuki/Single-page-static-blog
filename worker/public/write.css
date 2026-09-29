@@ -70,7 +70,8 @@ body {
 }
 
 #post-body:focus-visible {
-  outline: 1px solid transparent;
+  outline: 1px solid var(--muted);
+  outline-offset: 5px;
 }
 
 .toolbar {
@@ -98,6 +99,13 @@ body {
   text-underline-offset: 0.2em;
 }
 
+.plain-button:disabled,
+.logout-button:disabled,
+.attachment button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
 .plain-button:focus-visible,
 .logout-button:focus-visible,
 #author-key:focus-visible {
@@ -105,12 +113,23 @@ body {
   outline-offset: 3px;
 }
 
-.toolbar label {
+.toolbar button {
   cursor: pointer;
+}
+
+#editor-form[aria-busy="true"] #post-body {
+  cursor: progress;
 }
 
 .status {
   min-height: 1.5em;
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+}
+
+.editor-note {
   margin: 10px 0 0;
   color: var(--muted);
   font-family: ui-sans-serif, system-ui, sans-serif;

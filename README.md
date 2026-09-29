@@ -15,9 +15,10 @@
 ```sh
 npm ci
 npm run build
+npm test
 ```
 
-构建输出在 `dist/`。本地预览：
+`npm test` 使用模拟 GitHub API 检查 Worker 登录、会话与发布流程。构建输出在 `dist/`。本地预览：
 
 ```sh
 python3 -m http.server 8080 --directory dist

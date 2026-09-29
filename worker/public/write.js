@@ -5,14 +5,17 @@ const loginStatus = document.querySelector('#login-status');
 const editorForm = document.querySelector('#editor-form');
 const postBody = document.querySelector('#post-body');
 const imageInput = document.querySelector('#image-input');
+const photoButton = document.querySelector('#photo-button');
 const attachments = document.querySelector('#attachments');
 const publishButton = document.querySelector('#publish-button');
+const loginButton = document.querySelector('#login-button');
 const publishStatus = document.querySelector('#publish-status');
 const logoutButton = document.querySelector('#logout-button');
 const draftKey = 'single-timeline-draft-v1';
 const maxImages = 5;
 const maxImageBytes = 1024 * 1024;
 const images = new Map();
+let pendingImageCount = 0;
 
 function setView(authenticated) {
   loginView.hidden = authenticated;
@@ -27,6 +30,24 @@ function saveDraft() {
   } catch {
     publishStatus.textContent = 'Draft could not be saved in this browser.';
   }
+}
+
+async function readResponseJson(response) {
+  try {
+    return await response.json();
+  } catch {
+    return {};
+  }
+}
+
+function setPublishing(publishing) {
+  editorForm.setAttribute('aria-busy', String(publishing));
+  postBody.readOnly = publishing;
+  imageInput.disabled = publishing;
+  photoButton.disabled = publishing;
+  publishButton.disabled = publishing;
+  logoutButton.disabled = publishing;
+  for (const button of attachments.querySelectorAll('button')) button.disabled = publishing;
 }
 
 function restoreDraft() {
@@ -69,6 +90,7 @@ function renderAttachments() {
     remove.type = 'button';
     remove.textContent = `Image ${index} ×`;
     remove.setAttribute('aria-label', `Remove image ${index}`);
+    remove.disabled = editorForm.getAttribute('aria-busy') === 'true';
     remove.addEventListener('click', () => {
       postBody.value = postBody.value.split(image.marker).join('');
       URL.revokeObjectURL(image.previewUrl);
@@ -96,31 +118,30 @@ async function convertImage(file) {
   if (file.size > 32 * 1024 * 1024) throw new Error('An original image must be 32 MB or smaller.');
 
   const bitmap = await createImageBitmap(file);
-  let scale = Math.min(1, 2048 / Math.max(bitmap.width, bitmap.height));
-  let quality = 0.86;
-  let blob;
+  try {
+    let scale = Math.min(1, 2048 / Math.max(bitmap.width, bitmap.height));
+    let quality = 0.86;
 
-  for (let attempt = 0; attempt < 14; attempt += 1) {
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
-    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
-    const context = canvas.getContext('2d', { alpha: true });
-    if (!context) throw new Error('Image processing is unavailable in this browser.');
-    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    blob = await canvasBlob(canvas, quality);
-    if (blob.size <= maxImageBytes) {
-      bitmap.close();
-      return blob;
+    for (let attempt = 0; attempt < 14; attempt += 1) {
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+      canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+      const context = canvas.getContext('2d', { alpha: true });
+      if (!context) throw new Error('Image processing is unavailable in this browser.');
+      context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      const blob = await canvasBlob(canvas, quality);
+      if (blob.size <= maxImageBytes) return blob;
+      if (quality > 0.5) quality -= 0.08;
+      else {
+        scale *= 0.85;
+        quality = 0.78;
+      }
     }
-    if (quality > 0.5) quality -= 0.08;
-    else {
-      scale *= 0.85;
-      quality = 0.78;
-    }
+
+    throw new Error('The compressed image is still larger than 1 MB. Choose a smaller image.');
+  } finally {
+    bitmap.close();
   }
-
-  bitmap.close();
-  throw new Error('The compressed image is still larger than 1 MB. Choose a smaller image.');
 }
 
 async function blobToBase64(blob) {
@@ -136,28 +157,34 @@ async function blobToBase64(blob) {
 async function addFiles(fileList) {
   const files = [...fileList].filter((file) => file.type.startsWith('image/'));
   if (!files.length) return;
-  const room = maxImages - images.size;
+  const room = maxImages - images.size - pendingImageCount;
   if (room <= 0) {
     publishStatus.textContent = 'A post can contain up to five images.';
     return;
   }
 
-  for (const file of files.slice(0, room)) {
-    try {
-      const blob = await convertImage(file);
-      const id = crypto.randomUUID();
-      const marker = `[[image:${id}]]`;
-      const image = { id, marker, blob, previewUrl: URL.createObjectURL(blob) };
-      images.set(id, image);
-      insertAtCursor(marker);
-      publishStatus.textContent = '';
-      renderAttachments();
-    } catch (error) {
-      publishStatus.textContent = error.message;
+  const selectedFiles = files.slice(0, room);
+  pendingImageCount += selectedFiles.length;
+  try {
+    for (const file of selectedFiles) {
+      try {
+        const blob = await convertImage(file);
+        const id = crypto.randomUUID();
+        const marker = `[[image:${id}]]`;
+        const image = { id, marker, blob, previewUrl: URL.createObjectURL(blob) };
+        images.set(id, image);
+        insertAtCursor(marker);
+        publishStatus.textContent = '';
+        renderAttachments();
+      } catch (error) {
+        publishStatus.textContent = error.message;
+      } finally {
+        pendingImageCount -= 1;
+      }
     }
+  } finally {
+    if (files.length > room) publishStatus.textContent = 'A post can contain up to five images.';
   }
-
-  if (files.length > room) publishStatus.textContent = 'A post can contain up to five images.';
 }
 
 function getReferencedImages(body) {
@@ -175,6 +202,11 @@ function getReferencedImages(body) {
 
 async function publish(event) {
   event.preventDefault();
+  if (pendingImageCount > 0) {
+    publishStatus.textContent = 'Wait for selected images to finish processing.';
+    return;
+  }
+
   const body = postBody.value;
   if (!body.trim()) {
     publishStatus.textContent = 'Write something or add an image.';
@@ -189,7 +221,7 @@ async function publish(event) {
     return;
   }
 
-  publishButton.disabled = true;
+  setPublishing(true);
   publishStatus.textContent = 'Publishing…';
 
   try {
@@ -206,37 +238,42 @@ async function publish(event) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
-    const result = await response.json();
+    const result = await readResponseJson(response);
     if (response.status === 401) {
       setView(false);
       loginStatus.textContent = 'Session expired. Enter the author key.';
       publishStatus.textContent = '';
       return;
     }
-    if (!response.ok) throw new Error(result.error || 'Publish failed. The draft is still here.');
+    if (!response.ok) throw new Error(result.error || `Publishing failed (HTTP ${response.status}).`);
 
     for (const image of images.values()) URL.revokeObjectURL(image.previewUrl);
     images.clear();
     postBody.value = '';
     renderAttachments();
-    localStorage.removeItem(draftKey);
+    try {
+      localStorage.removeItem(draftKey);
+    } catch {
+      // Publishing succeeded; the visible draft has already been cleared.
+    }
     publishStatus.textContent = `Published · ${result.timestamp} UTC`;
   } catch (error) {
     publishStatus.textContent = `${error.message} The draft is still here.`;
   } finally {
-    publishButton.disabled = false;
+    setPublishing(false);
   }
 }
 
 async function checkSession() {
   try {
     const response = await fetch('/api/session', { credentials: 'same-origin' });
-    const result = await response.json();
+    const result = await readResponseJson(response);
+    if (!response.ok) throw new Error(result.error || `Session check failed (HTTP ${response.status}).`);
     setView(Boolean(result.authenticated));
     if (result.authenticated) restoreDraft();
-  } catch {
+  } catch (error) {
     setView(false);
-    loginStatus.textContent = 'Connection failed. Reload this page to try again.';
+    loginStatus.textContent = `${error.message || 'Connection failed.'} Reload this page to try again.`;
   }
 }
 
@@ -245,6 +282,7 @@ loginForm.addEventListener('submit', async (event) => {
   const keyInput = document.querySelector('#author-key');
   const key = keyInput.value;
   loginStatus.textContent = 'Checking…';
+  loginButton.disabled = true;
 
   try {
     const response = await fetch('/api/login', {
@@ -253,7 +291,7 @@ loginForm.addEventListener('submit', async (event) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ authorKey: key })
     });
-    const result = await response.json();
+    const result = await readResponseJson(response);
     if (!response.ok) throw new Error(result.error || 'The author key was not accepted.');
     keyInput.value = '';
     loginStatus.textContent = '';
@@ -261,6 +299,8 @@ loginForm.addEventListener('submit', async (event) => {
     restoreDraft();
   } catch (error) {
     loginStatus.textContent = error.message;
+  } finally {
+    loginButton.disabled = false;
   }
 });
 
@@ -270,6 +310,7 @@ imageInput.addEventListener('change', async () => {
   await addFiles(imageInput.files || []);
   imageInput.value = '';
 });
+photoButton.addEventListener('click', () => imageInput.click());
 postBody.addEventListener('paste', (event) => {
   const files = [...(event.clipboardData?.files || [])].filter((file) => file.type.startsWith('image/'));
   if (!files.length) return;
@@ -283,10 +324,21 @@ postBody.addEventListener('keydown', (event) => {
   }
 });
 logoutButton.addEventListener('click', async () => {
-  await fetch('/api/logout', { method: 'POST', credentials: 'same-origin' });
-  setView(false);
-  loginStatus.textContent = '';
-  document.querySelector('#author-key').focus();
+  logoutButton.disabled = true;
+  publishStatus.textContent = 'Signing out…';
+  try {
+    const response = await fetch('/api/logout', { method: 'POST', credentials: 'same-origin' });
+    const result = await readResponseJson(response);
+    if (!response.ok) throw new Error(result.error || `Sign-out failed (HTTP ${response.status}).`);
+    setView(false);
+    loginStatus.textContent = '';
+    publishStatus.textContent = '';
+    document.querySelector('#author-key').focus();
+  } catch {
+    publishStatus.textContent = 'Sign-out failed. Check your connection and try again.';
+  } finally {
+    logoutButton.disabled = false;
+  }
 });
 
 void checkSession();

@@ -31,7 +31,9 @@ function withWriterHeaders(response) {
   headers.set('Referrer-Policy', 'no-referrer');
   headers.set('X-Content-Type-Options', 'nosniff');
   headers.set('X-Frame-Options', 'DENY');
+  headers.set('X-Robots-Tag', 'noindex, nofollow, noarchive');
   headers.set('Cross-Origin-Resource-Policy', 'same-origin');
+  headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   return new Response(response.body, { status: response.status, headers });
 }
 
@@ -282,7 +284,7 @@ async function createPost(payload, env) {
   }
 
   const imagePaths = new Map(imageEntries.map((image) => [image.id, image.publicPath]));
-  const markdown = payload.body.replace(IMAGE_MARKER_PATTERN, (_match, id) => `![](${imagePaths.get(id.toLowerCase())})`);
+  const markdown = payload.body.replace(IMAGE_MARKER_PATTERN, (_match, id) => `![Photo](${imagePaths.get(id.toLowerCase())})`);
   const postPath = `content/${folder}/${timestamp}-${suffix}.md`;
   const markdownBlob = await createBlob(markdown, 'utf-8', env);
   const treeEntries = [

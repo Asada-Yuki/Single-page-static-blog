@@ -127,7 +127,9 @@ async function collectPosts(directory) {
     if (!match) throw new Error(`Post filename is not a UTC timestamp: ${relative(root, path)}`);
     const iso = match[1].replace(/T(\d{2})-(\d{2})-(\d{2})\./, 'T$1:$2:$3.');
     const timestamp = new Date(iso);
-    if (Number.isNaN(timestamp.getTime())) throw new Error(`Invalid UTC timestamp: ${relative(root, path)}`);
+    if (Number.isNaN(timestamp.getTime()) || timestamp.toISOString() !== iso) {
+      throw new Error(`Invalid UTC timestamp: ${relative(root, path)}`);
+    }
 
     const rel = relative(contentRoot, path).split(sep).join('/');
     const expectedDir = `${timestamp.toISOString().slice(0, 4)}/${timestamp.toISOString().slice(5, 7)}`;
@@ -208,7 +210,10 @@ async function main() {
   await mkdir(distRoot, { recursive: true });
   await writeFile(join(distRoot, 'index.html'), html);
   await cp(join(root, 'src', 'style.css'), join(distRoot, 'style.css'));
-  await cp(publicRoot, distRoot, { recursive: true });
+  await cp(publicRoot, distRoot, {
+    recursive: true,
+    filter: (path) => !path.endsWith('.gitkeep')
+  });
 
   const htmlSize = Buffer.byteLength(html);
   if (posts.length > 5000 || htmlSize > 5 * 1024 * 1024) {
