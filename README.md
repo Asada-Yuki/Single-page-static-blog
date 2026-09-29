@@ -15,9 +15,10 @@
 ```sh
 npm ci
 npm run build
+npm test
 ```
 
-`npm run build` 会先运行 Worker 测试，再生成 `dist/`。单独运行测试：`npm test`。测试使用模拟 GitHub API 检查登录、会话、跨站请求拦截、发布重试与登出。本地预览：
+`npm test` 使用模拟 GitHub API 检查 Worker 登录、会话与发布流程。构建输出在 `dist/`。本地预览：
 
 ```sh
 python3 -m http.server 8080 --directory dist
