@@ -225,6 +225,7 @@ async function github(path, env, method = 'GET', body) {
     method,
     headers: {
       Accept: 'application/vnd.github+json',
+      'User-Agent': 'single-timeline-blog-publisher',
       Authorization: `Bearer ${env.GITHUB_TOKEN}`,
       'X-GitHub-Api-Version': '2026-03-10',
       'Content-Type': 'application/json'
