@@ -84,7 +84,7 @@ const md = new MarkdownIt('commonmark', {
   html: false,
   linkify: true,
   typographer: false,
-  breaks: false
+  breaks: true
 });
 
 md.validateLink = (href) => {
