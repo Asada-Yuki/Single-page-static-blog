@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
-import { cp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
-import { dirname, join, relative, sep } from 'node:path';
+import { access, cp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { basename, dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import MarkdownIt from 'markdown-it';
 
@@ -190,6 +190,100 @@ function entryId(post) {
   return `entry-${post.path.replace(/\.md$/, '').replace(/[^A-Za-z0-9_-]+/g, '-')}`;
 }
 
+function postKey(post) {
+  return basename(post.path, '.md');
+}
+
+function postPath(post) {
+  return `/p/${encodeURIComponent(postKey(post))}/`;
+}
+
+function postUrl(post, siteUrl) {
+  return `${siteUrl}${postPath(post)}`;
+}
+
+function inlineText(tokens = []) {
+  return tokens.map((token) => {
+    if (token.type === 'text' || token.type === 'code_inline') return token.content;
+    if (token.type === 'image') return token.content || '';
+    if (token.type === 'softbreak' || token.type === 'hardbreak') return ' ';
+    if (token.children?.length) return inlineText(token.children);
+    return '';
+  }).join('');
+}
+
+function cleanShareText(value) {
+  return value
+    .replace(/https?:\/\/\S+/gu, '')
+    .replace(/[\u0000-\u001f\u007f]/gu, ' ')
+    .replace(/\s+/gu, ' ')
+    .trim();
+}
+
+function truncateCodePoints(value, limit) {
+  const characters = Array.from(value);
+  return characters.length > limit
+    ? `${characters.slice(0, limit).join('').trimEnd()}…`
+    : value;
+}
+
+async function shareMetadata(post, site, siteUrl) {
+  const tokens = md.parse(post.body, {});
+  const contentBlocks = [];
+  const images = [];
+  let hasVideo = false;
+
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (token.type === 'video_embed') hasVideo = true;
+    if (token.type !== 'inline') continue;
+
+    const text = cleanShareText(inlineText(token.children));
+    if (text) contentBlocks.push({ text, tokenIndex: index });
+
+    for (const child of token.children || []) {
+      if (child.type !== 'image') continue;
+      const src = child.attrGet('src') || '';
+      const alt = cleanShareText(child.content || inlineText(child.children));
+      if (!/^\/images\/\d{4}\/\d{2}\/[A-Za-z0-9._-]+\.webp$/.test(src)) continue;
+      try {
+        await access(join(publicRoot, src.slice(1)));
+        images.push({ src, alt });
+      } catch {
+        // An absent image is not advertised to link preview crawlers.
+      }
+    }
+  }
+
+  let heading = '';
+  for (let index = 0; index < tokens.length - 1; index += 1) {
+    if (!/^heading_open$/.test(tokens[index].type) || tokens[index + 1].type !== 'inline') continue;
+    heading = cleanShareText(inlineText(tokens[index + 1].children));
+    if (heading) break;
+  }
+
+  const firstText = contentBlocks[0]?.text || '';
+  const fallbackTime = `${post.iso.slice(0, 10)} ${formatUtcTime(post.iso)}`;
+  const fallbackKind = images.length ? '图片记录' : hasVideo ? '视频记录' : '媒体记录';
+  const title = truncateCodePoints(heading || firstText || `${fallbackKind} · ${fallbackTime}`, 48);
+  const description = truncateCodePoints(
+    contentBlocks.map((block) => block.text).join(' ') || images.find((image) => image.alt)?.alt || `${fallbackKind} · ${fallbackTime}`,
+    200
+  );
+  const image = images[0];
+  const imageUrl = image ? `${siteUrl}${image.src}` : `${siteUrl}/social-card.png`;
+  const imageAlt = image?.alt || (image ? `${site.name} 的内容图片` : `${site.name} 的个人时间流预览`);
+
+  return {
+    title,
+    description,
+    imageUrl,
+    imageAlt,
+    cardType: image ? 'summary_large_image' : 'summary',
+    publishedTime: post.iso
+  };
+}
+
 function previewText(body) {
   const plainText = body
     .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
@@ -230,7 +324,7 @@ function renderQuickBrowse(posts) {
     </nav>`;
 }
 
-function renderTimeline(posts) {
+function renderTimeline(posts, siteUrl) {
   if (posts.length === 0) {
     return '<p class="timeline-empty" role="status">暂时还没有内容。所有时间均为 UTC。</p>';
   }
@@ -244,11 +338,29 @@ function renderTimeline(posts) {
 
   return [...groups.entries()].map(([date, entries]) => {
     const dateTime = `${date}T00:00:00.000Z`;
-    const renderedEntries = entries.map((post) => `
+    const renderedEntries = entries.map((post) => {
+      const key = postKey(post);
+      const canonicalPath = postPath(post);
+      const canonicalUrl = `${siteUrl}${canonicalPath}`;
+      const dateTime = `${formatUtcShortDate(post.iso)} · ${formatUtcTime(post.iso)}`;
+      const title = `${post.iso.slice(0, 10)} · ${formatUtcTime(post.iso)}`;
+      return `
       <article class="entry" id="${entryId(post)}">
-        <time class="entry-time" lang="en" datetime="${escapeHtml(post.iso)}">${formatUtcTime(post.iso)}</time>
+        <div class="entry-toolbar">
+          <a class="entry-time entry-permalink" href="${escapeHtml(canonicalPath)}" aria-label="打开这条内容的永久链接，${escapeHtml(dateTime)}">
+            <time lang="en" datetime="${escapeHtml(post.iso)}">${formatUtcTime(post.iso)}</time>
+          </a>
+          <button class="entry-share" type="button" data-share-url="${escapeHtml(canonicalUrl)}" data-share-title="${escapeHtml(title)}" aria-label="分享这条内容，${escapeHtml(dateTime)}" title="分享这条内容" hidden>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8.2 11 7.6-3.8m-7.6 5.8 7.6 3.8" /><circle cx="6" cy="12" r="2.25" fill="currentColor" /><circle cx="18" cy="6" r="2.25" fill="currentColor" /><circle cx="18" cy="18" r="2.25" fill="currentColor" /></svg>
+          </button>
+        </div>
+        <div class="entry-share-fallback" data-share-fallback hidden>
+          <label><span>这条内容的永久链接</span><input type="text" value="${escapeHtml(canonicalUrl)}" readonly></label>
+          <button type="button" data-share-close>关闭</button>
+        </div>
         <div class="entry-content">${md.render(post.body)}</div>
-      </article>`).join('\n');
+      </article>`;
+    }).join('\n');
     return `
       <section class="day" aria-label="${formatUtcDate(dateTime)}">
       <time class="day-date" lang="en" datetime="${date}T00:00:00Z">${formatUtcDate(dateTime)}</time>
@@ -259,13 +371,14 @@ function renderTimeline(posts) {
 
 function renderFeed(posts, site, siteUrl) {
   const items = posts.slice(0, 20).map((post) => {
-    const link = `${siteUrl}/#${entryId(post)}`;
+    const link = postUrl(post, siteUrl);
+    const legacyGuid = `${siteUrl}/#${entryId(post)}`;
     const title = `${post.iso.slice(0, 10)} · ${formatUtcTime(post.iso)}`;
     return `
     <item>
       <title>${escapeHtml(title)}</title>
       <link>${escapeHtml(link)}</link>
-      <guid isPermaLink="true">${escapeHtml(link)}</guid>
+      <guid isPermaLink="true">${escapeHtml(legacyGuid)}</guid>
       <pubDate>${new Date(post.iso).toUTCString()}</pubDate>
       <description>${escapeHtml(previewText(post.body))}</description>
     </item>`;
@@ -285,11 +398,15 @@ function renderFeed(posts, site, siteUrl) {
 
 function renderSitemap(posts, siteUrl) {
   const lastModified = posts[0] ? `\n    <lastmod>${posts[0].iso}</lastmod>` : '';
+  const postUrls = posts.map((post) => `
+  <url>
+    <loc>${escapeHtml(postUrl(post, siteUrl))}</loc>
+  </url>`).join('');
   return `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>${escapeHtml(`${siteUrl}/`)}</loc>${lastModified}
-  </url>
+  </url>${postUrls}
 </urlset>
 `;
 }
@@ -326,6 +443,7 @@ async function main() {
   const theme = await readFile(join(root, 'src', 'theme.js'), 'utf8');
   const imageViewer = await readFile(join(root, 'src', 'image-viewer.js'), 'utf8');
   const quickBrowse = await readFile(join(root, 'src', 'quick-browse.js'), 'utf8');
+  const postSharing = await readFile(join(root, 'src', 'post-sharing.js'), 'utf8');
   const versionOf = (content) => createHash('sha256').update(content).digest('hex').slice(0, 12);
   const siteName = escapeHtml(site.name.trim());
   const siteDescription = escapeHtml(site.description.trim());
@@ -340,10 +458,30 @@ async function main() {
     THEME_VERSION: versionOf(theme),
     IMAGE_VIEWER_VERSION: versionOf(imageViewer),
     QUICK_BROWSE_VERSION: versionOf(quickBrowse),
+    POST_SHARING_VERSION: versionOf(postSharing),
     QUICK_BROWSE: renderQuickBrowse(posts),
-    TIMELINE: renderTimeline(posts)
+    TIMELINE: renderTimeline(posts, siteUrl)
   };
-  const html = fillTemplate(template, templateValues, 'src/template.html');
+  const homeValues = {
+    ...templateValues,
+    PAGE_TITLE: `${siteName} · 个人时间流`,
+    PAGE_DESCRIPTION: siteDescription,
+    CANONICAL_URL: `${escapeHtml(siteUrl)}/`,
+    OG_TYPE: 'website',
+    OG_TITLE: `${siteName} · 个人时间流`,
+    OG_DESCRIPTION: siteDescription,
+    OG_URL: `${escapeHtml(siteUrl)}/`,
+    OG_IMAGE: `${escapeHtml(siteUrl)}/social-card.png`,
+    OG_IMAGE_ALT: `${siteName} 的个人时间流首页预览`,
+    TWITTER_CARD: 'summary',
+    TWITTER_TITLE: `${siteName} · 个人时间流`,
+    TWITTER_DESCRIPTION: siteDescription,
+    TWITTER_IMAGE: `${escapeHtml(siteUrl)}/social-card.png`,
+    TWITTER_IMAGE_ALT: `${siteName} 的个人时间流首页预览`,
+    ARTICLE_META: '',
+    INITIAL_ENTRY_ID: ''
+  };
+  const html = fillTemplate(template, homeValues, 'src/template.html');
   const notFoundHtml = fillTemplate(notFoundTemplate, templateValues, 'src/404.html');
 
   await rm(distRoot, { recursive: true, force: true });
@@ -354,10 +492,47 @@ async function main() {
   await writeFile(join(distRoot, 'theme.js'), theme);
   await writeFile(join(distRoot, 'image-viewer.js'), imageViewer);
   await writeFile(join(distRoot, 'quick-browse.js'), quickBrowse);
+  await writeFile(join(distRoot, 'post-sharing.js'), postSharing);
   await cp(publicRoot, distRoot, {
     recursive: true,
     filter: (path) => !path.endsWith('.gitkeep')
   });
+
+  const usedPostKeys = new Set();
+  let sharePageBytes = 0;
+  for (const post of posts) {
+    const key = postKey(post);
+    if (usedPostKeys.has(key)) throw new Error(`Duplicate post key: ${key}`);
+    usedPostKeys.add(key);
+
+    const metadata = await shareMetadata(post, site, siteUrl);
+    const canonicalUrl = postUrl(post, siteUrl);
+    const sharePageValues = {
+      ...homeValues,
+      PAGE_TITLE: `${escapeHtml(metadata.title)} · ${siteName}`,
+      PAGE_DESCRIPTION: escapeHtml(metadata.description),
+      CANONICAL_URL: escapeHtml(canonicalUrl),
+      OG_TYPE: 'article',
+      OG_TITLE: escapeHtml(metadata.title),
+      OG_DESCRIPTION: escapeHtml(metadata.description),
+      OG_URL: escapeHtml(canonicalUrl),
+      OG_IMAGE: escapeHtml(metadata.imageUrl),
+      OG_IMAGE_ALT: escapeHtml(metadata.imageAlt),
+      TWITTER_CARD: metadata.cardType,
+      TWITTER_TITLE: escapeHtml(metadata.title),
+      TWITTER_DESCRIPTION: escapeHtml(metadata.description),
+      TWITTER_IMAGE: escapeHtml(metadata.imageUrl),
+      TWITTER_IMAGE_ALT: escapeHtml(metadata.imageAlt),
+      ARTICLE_META: `<meta property="article:published_time" content="${escapeHtml(metadata.publishedTime)}">`,
+      INITIAL_ENTRY_ID: escapeHtml(entryId(post))
+    };
+    const sharePage = fillTemplate(template, sharePageValues, `share page ${key}`);
+    const outputPath = join(distRoot, 'p', key, 'index.html');
+    await mkdir(dirname(outputPath), { recursive: true });
+    await writeFile(outputPath, sharePage);
+    sharePageBytes += Buffer.byteLength(sharePage);
+  }
+
   await writeFile(join(distRoot, 'robots.txt'), `User-agent: *\nAllow: /\nDisallow: /write\nDisallow: /api/\n\nSitemap: ${siteUrl}/sitemap.xml\n`);
   await writeFile(join(distRoot, 'sitemap.xml'), renderSitemap(posts, siteUrl));
   await writeFile(join(distRoot, 'feed.xml'), renderFeed(posts, {
@@ -367,10 +542,11 @@ async function main() {
   }, siteUrl));
 
   const htmlSize = Buffer.byteLength(html);
-  if (posts.length > 5000 || htmlSize > 5 * 1024 * 1024) {
-    console.warn(`Timeline size reached its review threshold: ${posts.length} posts, ${htmlSize} HTML bytes.`);
+  const totalHtmlSize = htmlSize + sharePageBytes;
+  if (posts.length > 5000 || totalHtmlSize > 50 * 1024 * 1024) {
+    console.warn(`Static timeline output reached its review threshold: ${posts.length} posts, ${totalHtmlSize} HTML bytes.`);
   }
-  console.log(`Built ${posts.length} UTC posts into dist/ (${htmlSize} HTML bytes).`);
+  console.log(`Built ${posts.length} UTC posts and ${posts.length} share pages into dist/ (home ${htmlSize} bytes, share pages ${sharePageBytes} bytes, total HTML ${totalHtmlSize} bytes).`);
 }
 
 main().catch((error) => {
