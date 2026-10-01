@@ -98,7 +98,7 @@ function alignEntry(entry, behavior = 'instant') {
   const targetTop = longEntry
     ? viewport.top + viewport.height * 0.16
     : viewport.top + (viewport.height - rect.height) / 2;
-  const delta = longEntry ? rect.top - targetTop : rect.top + rect.height / 2 - targetTop;
+  const delta = rect.top - targetTop;
   const maxScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
   const nextScroll = Math.min(maxScroll, Math.max(0, window.scrollY + delta));
   window.scrollTo({ top: nextScroll, behavior });
