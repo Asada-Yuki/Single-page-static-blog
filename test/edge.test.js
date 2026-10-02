@@ -1,0 +1,30 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { PUBLIC_CSP, onRequest } from '../functions/_middleware.js';
+
+test('public HTML gets an uncached random nonce before edge injection; assets stay static', async () => {
+  const next = async () => new Response('<p>Literal HTML</p>', { headers: { 'Content-Type': 'text/html; charset=utf-8', ETag: 'same-static-asset' } });
+  const request = new Request('https://yuki.art/p/example/');
+  const first = await onRequest({ request, next });
+  const second = await onRequest({ request, next });
+  const nonce = r => r.headers.get('Content-Security-Policy').match(/'nonce-([^']+)'/)[1];
+  assert.notEqual(nonce(first), nonce(second));
+  assert.equal(Buffer.from(nonce(first), 'base64').length, 16);
+  assert.equal(first.headers.get('Cache-Control'), 'private, no-cache');
+  assert.equal(first.headers.get('ETag'), null);
+  assert.equal(await first.text(), '<p>Literal HTML</p>');
+  assert.equal(first.headers.get('X-Frame-Options'), 'DENY');
+  assert.doesNotMatch(PUBLIC_CSP, /unsafe-inline|unsafe-eval/);
+  const preview = await onRequest({ request: new Request('https://preview.single-page-static-blog.pages.dev/'), next });
+  assert.equal(preview.headers.get('X-Robots-Tag'), 'noindex');
+  assert.equal(preview.headers.get('Cache-Control'), 'no-transform');
+  assert.equal(preview.headers.get('Content-Security-Policy'), PUBLIC_CSP);
+  const json = new Response('{}', { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=31536000, immutable' } });
+  assert.equal(await onRequest({ request, next: async () => json }), json);
+  const headersFile = await readFile(new URL('../public/_headers', import.meta.url), 'utf8');
+  assert.equal(headersFile.split('\n').find(l => l.trimStart().startsWith('Content-Security-Policy:')).trim().slice('Content-Security-Policy: '.length), PUBLIC_CSP);
+  const routes = JSON.parse(await readFile(new URL('../public/_routes.json', import.meta.url), 'utf8'));
+  assert.ok(routes.include.includes('/p/*'));
+  assert.ok(!routes.include.includes('/*'));
+});

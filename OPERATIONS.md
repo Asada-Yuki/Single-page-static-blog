@@ -27,8 +27,9 @@
 - GitHub fine-grained token 仅授权此仓库，Contents read/write；记录到期日并在到期前替换。
 - 默认 30 天会话，SQLite Durable Object 记录撤销。退出会立即使原 Cookie 失效；更换 AUTHOR_KEY 会使全部旧签名失效。不要删除 SessionStore migration 或 namespace 来模拟退出。
 - 完整 WebP 解码在 Durable Object 执行，适合当前免费计划 CPU 限额；无需升级套餐。图片、正文和密钥不进入会话数据库。
-- CSP 禁止 unsafe-inline/eval。公开页面通过区级响应头转换规则，为 Cloudflare 检测脚本生成每次请求独立的 nonce（`uuidv4(cf.random_seed)`）；其他来源不能借此执行 inline 脚本。公开主站不使用 no-transform，避免阻断自动统计；写作/API 和 pages.dev 仍保留 no-transform。保留 WAF，不以伪造 User-Agent 证明机器人可访问。
-- 响应头规则 `yuki.art public CSP with per-request nonce` 只覆盖主站公开页面（`/`、`/about/`、`/p/*`），不覆盖写作/API。更改源站 CSP 时必须同步更新区级表达式；删除该规则前先恢复公开页面 no-transform，否则检测脚本会被 CSP 拦截。验证不同请求 nonce 不同，且实际注入脚本使用相同 nonce。
+- CSP 禁止 unsafe-inline/eval。Pages middleware 在边缘注入检测脚本前生成每次请求独立的 16 字节随机 nonce。最终 HTML 为 private/no-cache，底层静态资产继续由 Pages 缓存。公开主站不使用 no-transform，避免阻断自动统计；写作/API 和 pages.dev 仍保留 no-transform。保留 WAF，不以伪造 User-Agent 证明机器人可访问。
+- nonce 必须在 Pages Function 返回时提供；响应头 Transform 的执行时机太晚，不能重新生成 nonce。区级 CSP 规则只保留源站 CSP（`http.response.headers["content-security-policy"][0]`）。验证不同请求 nonce 不同，且实际注入脚本使用相同 nonce。源站 `_headers` 与 middleware 的 CSP 保持一致，回归会核对。
+- `_routes.json` 仅让公开 HTML 路径执行 middleware，图片、脚本、样式、分块数据不产生 Functions 调用。HTML 请求计入 Workers/Pages Functions 的免费额度；当前流量不需要付费，超过额度可先让静态页面继续服务（公开页面 fail open），不要把作者认证搬入该兜底。回退 middleware 前先恢复公开页面 no-transform；不得直接开启 unsafe-inline。
 - Cloudflare 最终安全头可能被区级规则覆盖，必须检查线上结果。HSTS 先用一天，不默认 includeSubDomains/preload。
 - 自动统计仍沿用 Cloudflare Web Analytics 的地区排除设置；检查 beacon 是否能正常加载，不擅自扩大统计地区。
 

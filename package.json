@@ -8,7 +8,8 @@
     "build": "node build.mjs",
     "test": "npm run build:worker-assets && node --test test/*.test.js worker/test/*.test.js",
     "test:browser": "playwright test",
-    "check:worker": "wrangler deploy --dry-run --config worker/wrangler.toml"
+    "check:worker": "wrangler deploy --dry-run --config worker/wrangler.toml",
+    "check:pages": "wrangler pages functions build --outfile /tmp/yuki-pages-functions.js"
   },
   "dependencies": {
     "@jsquash/webp": "1.5.0",
