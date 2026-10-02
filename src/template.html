@@ -23,10 +23,11 @@
     <meta name="twitter:image" content="{{TWITTER_IMAGE}}">
     <meta name="twitter:image:alt" content="{{TWITTER_IMAGE_ALT}}">
     {{ARTICLE_META}}
+    {{STRUCTURED_DATA}}
     <title>{{PAGE_TITLE}}</title>
     <link rel="stylesheet" href="/style.css?v={{STYLE_VERSION}}">
   </head>
-  <body data-initial-entry="{{INITIAL_ENTRY_ID}}">
+  <body class="{{BODY_CLASS}}" data-initial-entry="{{INITIAL_ENTRY_ID}}" data-timeline-index="{{TIMELINE_INDEX}}">
     <a class="skip-link" href="#timeline-content">跳到内容</a>
     {{QUICK_BROWSE}}
     <main class="timeline-shell" id="timeline-content">
@@ -38,13 +39,15 @@
           <svg class="theme-toggle__icon theme-toggle__icon--sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" /><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42" /></svg>
         </button>
       </header>
-      <div class="timeline">
+      <div class="timeline" aria-busy="false">
         {{TIMELINE}}
       </div>
+      {{CONTEXT_LINKS}}
       <footer class="site-footer" aria-label="站点信息">
         <span>© {{YEAR}} {{SITE_NAME}}</span>
         <span>时间均为 UTC</span>
         <a href="/feed.xml">RSS</a>
+        <a href="/about/">关于</a>
         <a href="#top">↑ 回到顶部</a>
       </footer>
     </main>
@@ -62,6 +65,7 @@
       <div class="image-viewer__stage">
         <img class="image-viewer__image" alt="">
       </div>
+      <p class="image-viewer__status" role="status" hidden></p>
       <button class="image-viewer__button image-viewer__next" type="button" aria-label="下一张">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg>
       </button>

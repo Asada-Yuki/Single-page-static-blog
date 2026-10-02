@@ -1,3 +1,6 @@
+import { snapshotText, sha256, validAttempt, validPublishResult } from '/writer-protocol.js';
+import { DraftStorage } from '/write-drafts.js';
+
 const loginView = document.querySelector('#login-view');
 const composerView = document.querySelector('#composer-view');
 const loginForm = loginView;
@@ -12,8 +15,14 @@ const clearDraftButton = document.querySelector('#clear-draft-button');
 const loginButton = document.querySelector('#login-button');
 const publishStatus = document.querySelector('#publish-status');
 const logoutButton = document.querySelector('#logout-button');
-const draftKey = 'single-timeline-draft-v1';
-const attemptKey = 'single-timeline-attempt-v1';
+const storage = new DraftStorage();
+const storageReady = storage.initialize();
+const draftNote = document.querySelector('#draft-note');
+const recoverButton = document.querySelector('#recover-published-button');
+let lastPublished = null;
+let restored = false;
+let saveTimer;
+let deploymentGeneration = 0;
 const maxImages = 5;
 const maxImageBytes = 1024 * 1024;
 const images = new Map();
@@ -21,25 +30,44 @@ let pendingImageCount = 0;
 let pendingAttempt = null;
 
 function setView(authenticated) {
+  document.querySelector('#startup-status').hidden = true;
   loginView.hidden = authenticated;
   composerView.hidden = !authenticated;
   logoutButton.hidden = !authenticated;
   if (authenticated) postBody.focus();
 }
 
+function draftSnapshot() {
+  return { body: postBody.value, images: [...images.values()].map(({ id, marker, blob, alt }) => ({ id, marker, blob, alt })),
+    attempt: pendingAttempt, lastPublished };
+}
+
+async function saveDraftNow() {
+  await storageReady;
+  await storage.save(draftSnapshot());
+}
+
 function saveDraft() {
-  try {
-    localStorage.setItem(draftKey, postBody.value);
-  } catch {
-    publishStatus.textContent = 'Draft could not be saved in this browser.';
-  }
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => void saveDraftNow().catch(() => {
+    draftNote.textContent = 'Draft could not be saved. Keep this tab open; your text and photos are still here.';
+  }), 200);
 }
 
 async function readResponseJson(response) {
+  if (!(response.headers.get('content-type') || '').toLowerCase().includes('application/json')) throw new Error('The site returned an unexpected response.');
   try {
-    return await response.json();
-  } catch {
-    return {};
+    const value = await response.json();
+    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error();
+    return value;
+  } catch { throw new Error('The site returned invalid data.'); }
+}
+
+async function api(path, options = {}) {
+  try { return await fetch(path, { credentials: 'same-origin', signal: AbortSignal.timeout(60000), ...options }); }
+  catch (error) {
+    if (error.name === 'TimeoutError' || error.name === 'AbortError') throw new Error('The connection timed out. Retry safely with the same draft.');
+    throw error;
   }
 }
 
@@ -59,58 +87,45 @@ function updateDraftClearState() {
   clearDraftButton.disabled = editorForm.getAttribute('aria-busy') === 'true' || pendingImageCount > 0;
 }
 
-function isPublishAttempt(value) {
-  if (!value || typeof value.id !== 'string' || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(value.id)) return false;
-  if (typeof value.timestamp !== 'string') return false;
-  const timestamp = new Date(value.timestamp);
-  return !Number.isNaN(timestamp.getTime()) && timestamp.toISOString() === value.timestamp;
-}
-
-async function getPublishAttempt() {
-  if (pendingAttempt) return pendingAttempt;
-
-  try {
-    const stored = JSON.parse(localStorage.getItem(attemptKey) || 'null');
-    if (isPublishAttempt(stored)) {
-      pendingAttempt = stored;
-      return stored;
-    }
-  } catch {
-    // Start a fresh attempt when browser storage is unavailable or malformed.
-  }
-
-  const response = await fetch('/api/attempt', {
-    method: 'POST',
-    credentials: 'same-origin'
-  });
+async function getPublishAttempt(hash) {
+  if (validAttempt(pendingAttempt, hash)) return pendingAttempt;
+  pendingAttempt = null;
+  const response = await api('/api/attempt', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ snapshotHash: hash }) });
   const result = await readResponseJson(response);
   if (response.status === 401) {
-    setView(false);
-    loginStatus.textContent = 'Session expired. Enter the author key.';
+    setView(false); loginStatus.textContent = 'Session expired. Enter the author key.';
     throw new Error('Session expired. Enter the author key.');
   }
-  if (!response.ok || !isPublishAttempt(result)) {
-    throw new Error(result.error || `Publish setup failed (HTTP ${response.status}).`);
-  }
-
-  pendingAttempt = { id: result.id, timestamp: result.timestamp };
-  try {
-    localStorage.setItem(attemptKey, JSON.stringify(pendingAttempt));
-  } catch {
-    // Keep the attempt in memory; the draft can still be published in this tab.
-  }
+  if (!response.ok || !validAttempt(result, hash)) throw new Error(result.error || `Publish setup failed (HTTP ${response.status}).`);
+  pendingAttempt = result;
+  await saveDraftNow().catch(() => { draftNote.textContent = 'Keep this tab open to recover this publish attempt.'; });
   return pendingAttempt;
 }
 
-function restoreDraft() {
-  try {
-    postBody.value = localStorage.getItem(draftKey) || '';
-  } catch {
-    postBody.value = '';
-  }
-  if (postBody.value.includes('[[image:')) {
-    publishStatus.textContent = 'This draft contains image markers, but image files are not stored here. Remove the old markers, select the images again, or clear the draft.';
-  }
+function applyDraft(draft) {
+  postBody.value = draft?.body || '';
+  for (const image of images.values()) URL.revokeObjectURL(image.previewUrl);
+  images.clear();
+  for (const image of draft?.images || []) if (image.blob instanceof Blob) images.set(image.id, { ...image, previewUrl: URL.createObjectURL(image.blob) });
+  pendingAttempt = draft?.attempt || null;
+  lastPublished = draft?.lastPublished || null;
+  recoverButton.hidden = !lastPublished;
+  recoverButton.disabled = Boolean(postBody.value.trim());
+  renderAttachments();
+  if (postBody.value.includes('[[image:') && !images.size) publishStatus.textContent = 'Text was recovered, but some photos are missing. Add them again or remove the placeholders.';
+}
+
+async function restoreDraft() {
+  if (restored) return;
+  setPublishing(true);
+  await storageReady;
+  draftNote.textContent = storage.database
+    ? 'Draft text and photos stay in this browser. Clear the draft before sharing this device.'
+    : 'Photo recovery is unavailable. Keep this tab open until publishing is confirmed.';
+  try { applyDraft(await storage.load()); }
+  catch { draftNote.textContent = 'Draft recovery failed. Keep this tab open and check browser storage.'; }
+  restored = true;
+  setPublishing(false);
 }
 
 function insertAtCursor(value) {
@@ -151,6 +166,7 @@ function renderAttachments() {
     descriptionLabel.append(description);
     description.addEventListener('input', () => {
       image.alt = description.value;
+      saveDraft();
     });
     const remove = document.createElement('button');
     remove.type = 'button';
@@ -185,6 +201,7 @@ async function convertImage(file) {
 
   const bitmap = await createImageBitmap(file);
   try {
+    if (bitmap.width * bitmap.height > 40_000_000) throw new Error('Choose a photo with fewer than 40 million pixels.');
     let scale = Math.min(1, 2048 / Math.max(bitmap.width, bitmap.height));
     let quality = 0.86;
 
@@ -257,7 +274,7 @@ async function addFiles(fileList) {
 
 function getReferencedImages(body) {
   const pattern = /\[\[image:([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})\]\]/gi;
-  const ids = [...body.matchAll(pattern)].map((match) => match[1]);
+  const ids = [...body.matchAll(pattern)].map((match) => match[1].toLowerCase());
   const referenced = new Set(ids);
   if (body.replace(pattern, '').includes('[[image:')) {
     throw new Error('An image placeholder is invalid. Remove it or add the image again.');
@@ -290,22 +307,18 @@ async function publish(event) {
     return;
   }
 
+  deploymentGeneration += 1;
+  clearTimeout(saveTimer);
   setPublishing(true);
   publishStatus.textContent = 'Publishing…';
 
   try {
-    const attempt = await getPublishAttempt();
-    const payload = {
-      body,
-      attemptId: attempt.id,
-      timestamp: attempt.timestamp,
-      images: await Promise.all(selectedImages.map(async (image) => ({
-        id: image.id,
-        data: await blobToBase64(image.blob),
-        alt: image.alt
-      })))
-    };
-    const response = await fetch('/api/publish', {
+    const snapshot = { body, images: await Promise.all(selectedImages.map(async (image) => ({ id: image.id, data: await blobToBase64(image.blob), alt: image.alt }))) };
+    const hash = await sha256(snapshotText(snapshot.body, snapshot.images));
+    const attempt = await getPublishAttempt(hash);
+    const payload = { ...snapshot, attemptId: attempt.id, timestamp: attempt.timestamp,
+      signature: attempt.signature, snapshotHash: attempt.snapshotHash };
+    const response = await api('/api/publish', {
       method: 'POST',
       credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
@@ -319,27 +332,18 @@ async function publish(event) {
       return;
     }
     if (!response.ok) throw new Error(result.error || `Publishing failed (HTTP ${response.status}).`);
+    if (!validPublishResult(result, attempt)) throw new Error('Publishing was not confirmed by valid data.');
+    lastPublished = await storage.archive(draftSnapshot(), result);
 
     for (const image of images.values()) URL.revokeObjectURL(image.previewUrl);
     images.clear();
     postBody.value = '';
     renderAttachments();
     pendingAttempt = null;
-    try {
-      localStorage.removeItem(draftKey);
-      localStorage.removeItem(attemptKey);
-    } catch {
-      // Publishing succeeded; the visible draft has already been cleared.
-    }
-    publishStatus.replaceChildren(document.createTextNode(`Committed to GitHub · ${result.timestamp} · Pages will rebuild automatically. `));
-    if (typeof result.commit === 'string' && /^[0-9a-f]{40}$/i.test(result.commit)) {
-      const commitLink = document.createElement('a');
-      commitLink.href = `https://github.com/Asada-Yuki/Single-page-static-blog/commit/${result.commit}`;
-      commitLink.target = '_blank';
-      commitLink.rel = 'noopener noreferrer';
-      commitLink.textContent = 'View commit';
-      publishStatus.append(commitLink);
-    }
+    recoverButton.hidden = false;
+    recoverButton.disabled = false;
+    await saveDraftNow().catch(() => { draftNote.textContent = 'Published content was saved for recovery, but clearing the saved draft failed. Reload may restore it; do not publish it again.'; });
+    void checkDeployment(result);
   } catch (error) {
     publishStatus.textContent = `${error.message} The draft is still here.`;
   } finally {
@@ -349,11 +353,12 @@ async function publish(event) {
 
 async function checkSession() {
   try {
-    const response = await fetch('/api/session', { credentials: 'same-origin' });
+    const response = await api('/api/session', { credentials: 'same-origin' });
     const result = await readResponseJson(response);
     if (!response.ok) throw new Error(result.error || `Session check failed (HTTP ${response.status}).`);
-    setView(Boolean(result.authenticated));
-    if (result.authenticated) restoreDraft();
+    if (typeof result.authenticated !== 'boolean') throw new Error('The session response was invalid.');
+    setView(result.authenticated);
+    if (result.authenticated) await restoreDraft();
   } catch (error) {
     setView(false);
     loginStatus.textContent = `${error.message || 'Connection failed.'} Reload this page to try again.`;
@@ -368,7 +373,7 @@ loginForm.addEventListener('submit', async (event) => {
   loginButton.disabled = true;
 
   try {
-    const response = await fetch('/api/login', {
+    const response = await api('/api/login', {
       method: 'POST',
       credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
@@ -376,10 +381,11 @@ loginForm.addEventListener('submit', async (event) => {
     });
     const result = await readResponseJson(response);
     if (!response.ok) throw new Error(result.error || 'The author key was not accepted.');
+    if (result.authenticated !== true) throw new Error('Sign-in was not confirmed.');
     keyInput.value = '';
     loginStatus.textContent = '';
     setView(true);
-    restoreDraft();
+    await restoreDraft();
   } catch (error) {
     loginStatus.textContent = error.message;
   } finally {
@@ -393,20 +399,18 @@ clearDraftButton.addEventListener('click', () => {
   if (!window.confirm('Clear the draft text and selected images from this browser?')) return;
 
   postBody.value = '';
+  clearTimeout(saveTimer);
   for (const image of images.values()) URL.revokeObjectURL(image.previewUrl);
   images.clear();
   pendingAttempt = null;
-  try {
-    localStorage.removeItem(draftKey);
-    localStorage.removeItem(attemptKey);
-  } catch {
-    // The visible draft is cleared even if browser storage is unavailable.
-  }
+  lastPublished = null;
+  recoverButton.hidden = true;
+  void saveDraftNow().catch(() => { publishStatus.textContent = 'Visible draft cleared, but stored recovery data could not be removed.'; });
   renderAttachments();
   publishStatus.textContent = 'Draft cleared from this browser.';
   postBody.focus();
 });
-postBody.addEventListener('input', saveDraft);
+postBody.addEventListener('input', () => { recoverButton.disabled = Boolean(postBody.value.trim()); saveDraft(); });
 imageInput.addEventListener('change', async () => {
   await addFiles(imageInput.files || []);
   imageInput.value = '';
@@ -428,9 +432,10 @@ logoutButton.addEventListener('click', async () => {
   logoutButton.disabled = true;
   publishStatus.textContent = 'Signing out…';
   try {
-    const response = await fetch('/api/logout', { method: 'POST', credentials: 'same-origin' });
+    const response = await api('/api/logout', { method: 'POST', credentials: 'same-origin' });
     const result = await readResponseJson(response);
     if (!response.ok) throw new Error(result.error || `Sign-out failed (HTTP ${response.status}).`);
+    if (result.ok !== true) throw new Error('Sign-out was not confirmed.');
     setView(false);
     loginStatus.textContent = '';
     publishStatus.textContent = '';
@@ -442,4 +447,35 @@ logoutButton.addEventListener('click', async () => {
   }
 });
 
+function publishMessage(result, text) {
+  publishStatus.replaceChildren(document.createTextNode(text + ' '));
+  const link = document.createElement('a'); link.href = result.permalink; link.textContent = 'Open this post';
+  link.target = '_blank'; link.rel = 'noopener noreferrer'; publishStatus.append(link);
+}
+
+async function checkDeployment(result) {
+  const generation = ++deploymentGeneration;
+  publishMessage(result, 'Committed to GitHub. Waiting for the site to rebuild…');
+  for (const delay of [3000, 5000, 8000, 12000, 20000, 30000, 40000]) {
+    await new Promise((resolve) => setTimeout(resolve, delay));
+    if (generation !== deploymentGeneration || editorForm.getAttribute('aria-busy') === 'true') return;
+    try {
+      const response = await fetch(`${result.permalink}status.json`, { cache: 'no-store', signal: AbortSignal.timeout(8000) });
+      const status = await readResponseJson(response);
+      if (response.ok && status.key === result.key && status.timestamp === result.timestamp && status.bodyHash === result.bodyHash) {
+        publishMessage(result, 'Published on the site.'); return;
+      }
+    } catch { /* The previous deployment may not contain the new post yet. */ }
+  }
+  if (generation === deploymentGeneration) publishMessage(result, 'Committed, but the site update is not yet confirmed. Check again later.');
+}
+
+recoverButton.addEventListener('click', () => {
+  if (!lastPublished || postBody.value.trim()) return;
+  const saved = lastPublished;
+  applyDraft({ ...saved, lastPublished: saved, attempt: null }); saveDraft(); postBody.focus();
+  publishStatus.textContent = 'Restored as a new draft. Nothing has been published again.';
+});
+window.addEventListener('pagehide', () => { if (restored) { clearTimeout(saveTimer); void saveDraftNow().catch(() => {}); } });
+document.addEventListener('visibilitychange', () => { if (document.hidden && restored) { clearTimeout(saveTimer); void saveDraftNow().catch(() => {}); } });
 void checkSession();

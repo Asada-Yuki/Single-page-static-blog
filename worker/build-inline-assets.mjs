@@ -4,9 +4,11 @@ import { fileURLToPath } from 'node:url';
 
 const root = dirname(fileURLToPath(import.meta.url));
 const assets = [
+  { path: '/writer-protocol.js', file: '../shared/publish-protocol.js', contentType: 'text/javascript; charset=utf-8' },
   { path: '/write.html', file: 'public/write.html', contentType: 'text/html; charset=utf-8' },
   { path: '/write.css', file: 'public/write.css', contentType: 'text/css; charset=utf-8' },
-  { path: '/write.js', file: 'public/write.js', contentType: 'text/javascript; charset=utf-8' }
+  { path: '/write.js', file: 'public/write.js', contentType: 'text/javascript; charset=utf-8' },
+  { path: '/write-drafts.js', file: 'public/draft-storage.js', contentType: 'text/javascript; charset=utf-8' }
 ];
 
 const entries = Object.fromEntries(await Promise.all(assets.map(async (asset) => [

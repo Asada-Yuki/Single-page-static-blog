@@ -3,12 +3,16 @@ import { access, cp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/pro
 import { basename, dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import MarkdownIt from 'markdown-it';
+import { validateWebp } from './shared/webp-node.mjs';
 
-const root = dirname(fileURLToPath(import.meta.url));
+const sourceRoot = dirname(fileURLToPath(import.meta.url));
+const root = process.env.YUKI_BUILD_ROOT || sourceRoot;
 const contentRoot = join(root, 'content');
 const publicRoot = join(root, 'public');
 const distRoot = join(root, 'dist');
 const timestampPattern = /^(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}\.\d{3}Z)(?:-[a-f0-9]{8}|-[a-f0-9]{32})?\.md$/;
+const imageInfo = new Map();
+const CHUNK_SIZE = 12;
 
 function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, (char) => ({
@@ -18,6 +22,15 @@ function escapeHtml(value) {
     '"': '&quot;',
     "'": '&#39;'
   })[char]);
+}
+
+function escapeXml(value) {
+  return escapeHtml(String(value).replace(/[^\u0009\u000a\u000d\u0020-\ud7ff\ue000-\ufffd\u{10000}-\u{10ffff}]/gu, ''));
+}
+
+function articleText(body) {
+  return md.parse(body, {}).filter((token) => ['inline', 'fence', 'code_block'].includes(token.type))
+    .map((token) => token.children ? inlineText(token.children) : token.content).join('\n').trim();
 }
 
 function parseVideoUrl(raw) {
@@ -86,6 +99,7 @@ const md = new MarkdownIt('commonmark', {
   typographer: false,
   breaks: true
 });
+md.enable('linkify');
 
 md.validateLink = (href) => {
   const value = String(href).trim();
@@ -109,6 +123,10 @@ md.renderer.rules.image = (tokens, index, options, env, self) => {
   token.attrSet('alt', token.content || '');
   token.attrSet('loading', 'lazy');
   token.attrSet('decoding', 'async');
+  const dimensions = imageInfo.get(src);
+  if (!dimensions) throw new Error(`Missing or invalid image: ${src}`);
+  token.attrSet('width', String(dimensions.width));
+  token.attrSet('height', String(dimensions.height));
   return self.renderToken(tokens, index, options);
 };
 
@@ -177,13 +195,10 @@ function formatUtcShortDate(iso) {
 }
 
 function fillTemplate(template, values, name) {
-  let output = template;
-  for (const [key, value] of Object.entries(values)) {
-    output = output.replaceAll(`{{${key}}}`, () => value);
-  }
-  const unresolved = output.match(/\{\{[A-Z_]+\}\}/);
-  if (unresolved) throw new Error(`${name} contains an unresolved template value: ${unresolved[0]}`);
-  return output;
+  return template.replace(/\{\{([A-Z_]+)\}\}/g, (placeholder, key) => {
+    if (!Object.hasOwn(values, key)) throw new Error(`${name} contains an unresolved template value: ${placeholder}`);
+    return String(values[key]);
+  });
 }
 
 function entryId(post) {
@@ -286,6 +301,7 @@ async function shareMetadata(post, site, siteUrl) {
 
 function previewText(body) {
   const plainText = body
+    .replace(/[^\u0009\u000a\u000d\u0020-\ud7ff\ue000-\ufffd\u{10000}-\u{10ffff}]/gu, '')
     .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
     .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
     .replace(/https?:\/\/\S+/g, '')
@@ -343,9 +359,9 @@ function renderTimeline(posts, siteUrl) {
       const canonicalPath = postPath(post);
       const canonicalUrl = `${siteUrl}${canonicalPath}`;
       const dateTime = `${formatUtcShortDate(post.iso)} · ${formatUtcTime(post.iso)}`;
-      const title = `${post.iso.slice(0, 10)} · ${formatUtcTime(post.iso)}`;
+      const title = post.metadata?.title || previewText(post.body);
       return `
-      <article class="entry" id="${entryId(post)}">
+      <article class="entry" id="${entryId(post)}" data-post-key="${escapeHtml(key)}" data-date="${post.iso.slice(0, 10)}" aria-label="${escapeHtml(title)}">
         <div class="entry-toolbar">
           <a class="entry-time entry-permalink" href="${escapeHtml(canonicalPath)}" aria-label="打开这条内容的永久链接，${escapeHtml(dateTime)}">
             <time lang="en" datetime="${escapeHtml(post.iso)}">${formatUtcTime(post.iso)}</time>
@@ -362,7 +378,7 @@ function renderTimeline(posts, siteUrl) {
       </article>`;
     }).join('\n');
     return `
-      <section class="day" aria-label="${formatUtcDate(dateTime)}">
+      <section class="day" data-date="${date}" aria-label="${formatUtcDate(dateTime)}">
       <time class="day-date" lang="en" datetime="${date}T00:00:00Z">${formatUtcDate(dateTime)}</time>
         ${renderedEntries}
       </section>`;
@@ -376,21 +392,21 @@ function renderFeed(posts, site, siteUrl) {
     const title = `${post.iso.slice(0, 10)} · ${formatUtcTime(post.iso)}`;
     return `
     <item>
-      <title>${escapeHtml(title)}</title>
-      <link>${escapeHtml(link)}</link>
-      <guid isPermaLink="true">${escapeHtml(legacyGuid)}</guid>
+      <title>${escapeXml(title)}</title>
+      <link>${escapeXml(link)}</link>
+      <guid isPermaLink="true">${escapeXml(legacyGuid)}</guid>
       <pubDate>${new Date(post.iso).toUTCString()}</pubDate>
-      <description>${escapeHtml(previewText(post.body))}</description>
+      <description>${escapeXml(previewText(post.body))}</description>
     </item>`;
   }).join('');
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0">
   <channel>
-    <title>${escapeHtml(site.name)}</title>
-    <link>${escapeHtml(`${siteUrl}/`)}</link>
-    <description>${escapeHtml(site.description)}</description>
-    <language>${escapeHtml(site.lang)}</language>${items}
+    <title>${escapeXml(site.name)}</title>
+    <link>${escapeXml(`${siteUrl}/`)}</link>
+    <description>${escapeXml(site.description)}</description>
+    <language>${escapeXml(site.lang)}</language>${items}
   </channel>
 </rss>
 `;
@@ -406,7 +422,7 @@ function renderSitemap(posts, siteUrl) {
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>${escapeHtml(`${siteUrl}/`)}</loc>${lastModified}
-  </url>${postUrls}
+  </url><url><loc>${escapeHtml(`${siteUrl}/about/`)}</loc></url>${postUrls}
 </urlset>
 `;
 }
@@ -437,17 +453,32 @@ async function main() {
   const posts = await collectPosts(contentRoot);
   posts.sort((a, b) => b.iso.localeCompare(a.iso) || b.path.localeCompare(a.path));
 
+  // Validate each referenced image once, then reserve its exact aspect ratio.
+  for (const post of posts) {
+    for (const token of md.parse(post.body, {})) {
+      for (const child of token.children || []) {
+        if (child.type !== 'image') continue;
+        const src = child.attrGet('src') || '';
+        if (!/^\/images\/\d{4}\/\d{2}\/[A-Za-z0-9._-]+\.webp$/.test(src) || imageInfo.has(src)) continue;
+        try { imageInfo.set(src, await validateWebp(await readFile(join(publicRoot, src.slice(1))))); }
+        catch (error) { throw new Error(`Invalid image in ${post.path}: ${src}. ${error.message}`); }
+      }
+    }
+    post.metadata = await shareMetadata(post, site, siteUrl);
+  }
   const template = await readFile(join(root, 'src', 'template.html'), 'utf8');
   const notFoundTemplate = await readFile(join(root, 'src', '404.html'), 'utf8');
-  const stylesheet = await readFile(join(root, 'src', 'style.css'), 'utf8');
-  const theme = await readFile(join(root, 'src', 'theme.js'), 'utf8');
-  const imageViewer = await readFile(join(root, 'src', 'image-viewer.js'), 'utf8');
-  const quickBrowse = await readFile(join(root, 'src', 'quick-browse.js'), 'utf8');
-  const postSharing = await readFile(join(root, 'src', 'post-sharing.js'), 'utf8');
+  const assetNames = ['style.css', 'theme.js', 'image-viewer.js', 'quick-browse.js', 'post-sharing.js', 'timeline.js'];
+  const assets = Object.fromEntries(await Promise.all(assetNames.map(async (name) => [name, await readFile(join(root, 'src', name), 'utf8')])));
   const versionOf = (content) => createHash('sha256').update(content).digest('hex').slice(0, 12);
+  const stylesheet = assets['style.css'];
   const siteName = escapeHtml(site.name.trim());
   const siteDescription = escapeHtml(site.description.trim());
   const siteLang = escapeHtml(site.lang.trim());
+  const revision = versionOf(JSON.stringify({ site, posts: posts.map((p) => [p.path, p.body]), assets, images: [...imageInfo] }) + await readFile(new URL('./build.mjs', import.meta.url), 'utf8'));
+  const indexPath = `/timeline/index-${revision}.json`;
+  const author = { '@type': 'Person', '@id': `${siteUrl}/#author`, name: site.name.trim(), url: `${siteUrl}/about/`, sameAs: ['https://x.com/AsadaYuki_Art'] };
+  const jsonLd = (value) => `<script type="application/ld+json">${JSON.stringify(value).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026')}</script>`;
   const templateValues = {
     SITE_NAME: siteName,
     SITE_DESCRIPTION: siteDescription,
@@ -455,12 +486,14 @@ async function main() {
     SITE_URL: escapeHtml(siteUrl),
     YEAR: String(new Date().getUTCFullYear()),
     STYLE_VERSION: versionOf(stylesheet),
-    THEME_VERSION: versionOf(theme),
-    IMAGE_VIEWER_VERSION: versionOf(imageViewer),
-    QUICK_BROWSE_VERSION: versionOf(quickBrowse),
-    POST_SHARING_VERSION: versionOf(postSharing),
+    THEME_VERSION: versionOf(assets['theme.js']),
+    IMAGE_VIEWER_VERSION: versionOf(assets['image-viewer.js']),
+    QUICK_BROWSE_VERSION: versionOf(assets['quick-browse.js']),
+    POST_SHARING_VERSION: versionOf(assets['post-sharing.js']),
+    TIMELINE_VERSION: versionOf(assets['timeline.js']),
+    TIMELINE_INDEX: indexPath,
     QUICK_BROWSE: renderQuickBrowse(posts),
-    TIMELINE: renderTimeline(posts, siteUrl)
+    TIMELINE: renderTimeline(posts.slice(0, CHUNK_SIZE), siteUrl)
   };
   const homeValues = {
     ...templateValues,
@@ -479,7 +512,10 @@ async function main() {
     TWITTER_IMAGE: `${escapeHtml(siteUrl)}/social-card.png`,
     TWITTER_IMAGE_ALT: `${siteName} 的个人时间流首页预览`,
     ARTICLE_META: '',
-    INITIAL_ENTRY_ID: ''
+    INITIAL_ENTRY_ID: '',
+    BODY_CLASS: '',
+    CONTEXT_LINKS: '',
+    STRUCTURED_DATA: jsonLd({ '@context': 'https://schema.org', '@graph': [author, { '@type': 'WebSite', '@id': `${siteUrl}/#website`, url: `${siteUrl}/`, name: site.name.trim(), inLanguage: site.lang, author: { '@id': author['@id'] } }] })
   };
   const html = fillTemplate(template, homeValues, 'src/template.html');
   const notFoundHtml = fillTemplate(notFoundTemplate, templateValues, 'src/404.html');
@@ -488,11 +524,7 @@ async function main() {
   await mkdir(distRoot, { recursive: true });
   await writeFile(join(distRoot, 'index.html'), html);
   await writeFile(join(distRoot, '404.html'), notFoundHtml);
-  await writeFile(join(distRoot, 'style.css'), stylesheet);
-  await writeFile(join(distRoot, 'theme.js'), theme);
-  await writeFile(join(distRoot, 'image-viewer.js'), imageViewer);
-  await writeFile(join(distRoot, 'quick-browse.js'), quickBrowse);
-  await writeFile(join(distRoot, 'post-sharing.js'), postSharing);
+  for (const [name, content] of Object.entries(assets)) await writeFile(join(distRoot, name), content);
   await cp(publicRoot, distRoot, {
     recursive: true,
     filter: (path) => !path.endsWith('.gitkeep')
@@ -500,12 +532,12 @@ async function main() {
 
   const usedPostKeys = new Set();
   let sharePageBytes = 0;
-  for (const post of posts) {
+  for (const [postIndex, post] of posts.entries()) {
     const key = postKey(post);
     if (usedPostKeys.has(key)) throw new Error(`Duplicate post key: ${key}`);
     usedPostKeys.add(key);
 
-    const metadata = await shareMetadata(post, site, siteUrl);
+    const metadata = post.metadata;
     const canonicalUrl = postUrl(post, siteUrl);
     const sharePageValues = {
       ...homeValues,
@@ -524,13 +556,19 @@ async function main() {
       TWITTER_IMAGE: escapeHtml(metadata.imageUrl),
       TWITTER_IMAGE_ALT: escapeHtml(metadata.imageAlt),
       ARTICLE_META: `<meta property="article:published_time" content="${escapeHtml(metadata.publishedTime)}">`,
-      INITIAL_ENTRY_ID: escapeHtml(entryId(post))
+      INITIAL_ENTRY_ID: escapeHtml(entryId(post)),
+      BODY_CLASS: 'shared-page',
+      TIMELINE: renderTimeline([post], siteUrl),
+      QUICK_BROWSE: renderQuickBrowse(posts.slice(Math.max(0, postIndex - 3), postIndex + 5)),
+      CONTEXT_LINKS: `<noscript><nav class="context-links" aria-label="相邻内容">${[posts[postIndex - 1], posts[postIndex + 1]].filter(Boolean).map((p) => `<a href="${postPath(p)}">${escapeHtml(p.metadata.title)}</a>`).join(' · ')}</nav></noscript>`,
+      STRUCTURED_DATA: jsonLd({ '@context': 'https://schema.org', '@type': 'SocialMediaPosting', '@id': `${canonicalUrl}#post`, url: canonicalUrl, headline: metadata.title, description: metadata.description, articleBody: articleText(post.body), datePublished: post.iso, inLanguage: site.lang, image: metadata.imageUrl, author, mainEntityOfPage: canonicalUrl })
     };
     const sharePage = fillTemplate(template, sharePageValues, `share page ${key}`);
     const outputPath = join(distRoot, 'p', key, 'index.html');
     await mkdir(dirname(outputPath), { recursive: true });
     await writeFile(outputPath, sharePage);
     sharePageBytes += Buffer.byteLength(sharePage);
+    await writeFile(join(dirname(outputPath), 'status.json'), JSON.stringify({ key, timestamp: post.iso, bodyHash: createHash('sha256').update(post.body).digest('hex') }));
   }
 
   await writeFile(join(distRoot, 'robots.txt'), `User-agent: *\nAllow: /\nDisallow: /write\nDisallow: /api/\n\nSitemap: ${siteUrl}/sitemap.xml\n`);
@@ -541,12 +579,42 @@ async function main() {
     lang: site.lang.trim()
   }, siteUrl));
 
-  const htmlSize = Buffer.byteLength(html);
-  const totalHtmlSize = htmlSize + sharePageBytes;
-  if (posts.length > 5000 || totalHtmlSize > 50 * 1024 * 1024) {
-    console.warn(`Static timeline output reached its review threshold: ${posts.length} posts, ${totalHtmlSize} HTML bytes.`);
+  await mkdir(join(distRoot, 'timeline'), { recursive: true });
+  const index = { revision, chunkSize: CHUNK_SIZE, chunks: [], entries: posts.map((post, order) => ({
+    key: postKey(post), id: entryId(post), url: postPath(post), iso: post.iso,
+    date: formatUtcShortDate(post.iso), time: formatUtcTime(post.iso).replace(' UTC', ''),
+    preview: previewText(post.body), order, chunk: Math.floor(order / CHUNK_SIZE)
+  })) };
+  for (let start = 0; start < posts.length; start += CHUNK_SIZE) {
+    const path = `/timeline/chunk-${start / CHUNK_SIZE}-${revision}.json`;
+    index.chunks.push(path);
+    await writeFile(join(distRoot, path.slice(1)), JSON.stringify({ revision,
+      entries: posts.slice(start, start + CHUNK_SIZE).map((post) => ({ key: postKey(post), html: renderTimeline([post], siteUrl) })) }));
   }
-  console.log(`Built ${posts.length} UTC posts and ${posts.length} share pages into dist/ (home ${htmlSize} bytes, share pages ${sharePageBytes} bytes, total HTML ${totalHtmlSize} bytes).`);
+  await writeFile(join(distRoot, indexPath.slice(1)), JSON.stringify(index));
+  await writeFile(join(distRoot, 'deployment.json'), JSON.stringify({ revision, commit: process.env.CF_PAGES_COMMIT_SHA || process.env.GITHUB_SHA || null, posts: posts.length }));
+  const about = fillTemplate(notFoundTemplate, templateValues, 'about template')
+    .replace('<meta name="robots" content="noindex, nofollow, noarchive">', '')
+    .replace('<title>404 ·', '<title>关于 ·')
+    .replace('<p class="not-found__code">404</p>', '<p class="not-found__code">ASADA YUKI</p>')
+    .replace('<h1>页面不存在</h1>', '<h1>关于这条时间流</h1>')
+    .replace('<p>这条地址可能已更改或不存在。</p>', '<p>我是 Asada Yuki。这里记录文字、图片和日常，所有时间均为 UTC。</p><p><a href="https://x.com/AsadaYuki_Art" rel="me noopener noreferrer">@AsadaYuki_Art</a></p><p>访问统计使用 Cloudflare Web Analytics。没有评论或读者登录。</p>')
+    .replace('</head>', `<link rel="canonical" href="${siteUrl}/about/"></head>`);
+  await mkdir(join(distRoot, 'about'), { recursive: true });
+  await writeFile(join(distRoot, 'about/index.html'), about);
+  const walkOutput = async (path) => {
+    let bytes = 0; let files = 0;
+    for (const entry of await readdir(path, { withFileTypes: true })) {
+      const target = join(path, entry.name);
+      if (entry.isDirectory()) { const result = await walkOutput(target); bytes += result.bytes; files += result.files; }
+      else { const size = (await readFile(target)).byteLength; if (size > 25 * 1024 * 1024) throw new Error(`Asset exceeds 25 MiB: ${target}`); bytes += size; files += 1; }
+    }
+    return { bytes, files };
+  };
+  const output = await walkOutput(distRoot);
+  if (output.files > 19000 || output.bytes > 200 * 1024 * 1024) throw new Error('Site output exceeds the project budget. Review before deploying.');
+  const htmlSize = Buffer.byteLength(html);
+  console.log(`Built ${posts.length} UTC posts and share pages (${htmlSize} home bytes, ${sharePageBytes} share HTML bytes, ${output.bytes} output bytes, ${output.files} files).`);
 }
 
 main().catch((error) => {

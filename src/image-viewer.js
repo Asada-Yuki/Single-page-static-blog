@@ -16,9 +16,14 @@ if (dialog instanceof HTMLDialogElement) {
     const source = gallery[currentIndex];
     if (!source) return;
 
+    const status = dialog.querySelector('.image-viewer__status');
+    status.hidden = false; status.textContent = '正在加载图片…';
+    viewerImage.onload = () => { status.hidden = true; };
+    viewerImage.onerror = () => { status.hidden = false; status.textContent = '图片暂时无法加载，请关闭后重试。'; };
     viewerImage.src = source.currentSrc || source.src;
     viewerImage.alt = source.alt || '图片预览';
     count.textContent = gallery.length > 1 ? `${currentIndex + 1} / ${gallery.length}` : '';
+    dialog.dataset.single = String(gallery.length < 2);
     previousButton.hidden = gallery.length < 2;
     nextButton.hidden = gallery.length < 2;
   }
@@ -40,27 +45,43 @@ if (dialog instanceof HTMLDialogElement) {
     showCurrentImage();
   }
 
-  for (const entry of document.querySelectorAll('.entry')) {
-    const images = Array.from(entry.querySelectorAll('.entry-content img'));
-
-    images.forEach((image, index) => {
-      const trigger = document.createElement('button');
-      trigger.type = 'button';
-      trigger.className = 'image-viewer-trigger';
+  const enhanced = new WeakSet();
+  function enhanceImages() {
+    for (const image of document.querySelectorAll('.entry-content img')) {
+      if (enhanced.has(image)) continue;
+      enhanced.add(image);
+      const linked = image.closest('a');
+      const trigger = linked || document.createElement('button');
+      if (!linked) { trigger.type = 'button'; image.before(trigger); trigger.append(image); }
+      else trigger.setAttribute('role', 'button');
+      trigger.classList.add('image-viewer-trigger');
       trigger.setAttribute('aria-haspopup', 'dialog');
       trigger.setAttribute('aria-label', image.alt ? `全屏查看图片：${image.alt}` : '全屏查看图片');
-      image.before(trigger);
-      trigger.append(image);
-      trigger.addEventListener('click', () => openGallery(images, index, trigger));
-    });
+      trigger.addEventListener('click', (event) => {
+        if (event.metaKey || event.ctrlKey) return;
+        event.preventDefault();
+        const images = [...image.closest('.entry').querySelectorAll('.entry-content img')];
+        openGallery(images, images.indexOf(image), trigger);
+      });
+      if (linked) trigger.addEventListener('keydown', (event) => { if (event.key === ' ') { event.preventDefault(); trigger.click(); } });
+    }
   }
+  enhanceImages();
+  document.addEventListener('timeline:changed', enhanceImages);
 
   closeButton.addEventListener('click', () => dialog.close());
   previousButton.addEventListener('click', () => move(-1));
   nextButton.addEventListener('click', () => move(1));
 
   dialog.addEventListener('click', (event) => {
-    if (event.target === dialog) dialog.close();
+    if (event.target === dialog || event.target.classList.contains('image-viewer__stage')) dialog.close();
+    if (event.target === viewerImage && viewerImage.naturalWidth) {
+      const rect = viewerImage.getBoundingClientRect();
+      const scale = Math.min(rect.width / viewerImage.naturalWidth, rect.height / viewerImage.naturalHeight);
+      const width = viewerImage.naturalWidth * scale, height = viewerImage.naturalHeight * scale;
+      const left = rect.left + (rect.width - width) / 2, top = rect.top + (rect.height - height) / 2;
+      if (event.clientX < left || event.clientX > left + width || event.clientY < top || event.clientY > top + height) dialog.close();
+    }
   });
 
   dialog.addEventListener('close', () => {

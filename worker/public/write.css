@@ -84,6 +84,7 @@ body {
 
 .plain-button,
 .logout-button {
+  min-height: 44px;
   padding: 4px 0;
   border: 0;
   background: transparent;

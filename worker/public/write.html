@@ -11,6 +11,8 @@
   </head>
   <body>
     <main class="write-shell">
+      <p id="startup-status" class="status" role="status">Opening the writer… If this takes too long, reload to retry.</p>
+      <noscript><p>This writer needs JavaScript to save drafts and publish. Enable JavaScript and reload. Published posts remain readable.</p></noscript>
       <form id="login-view" class="login-view" hidden>
         <label class="key-label" for="author-key">Author key</label>
         <input id="author-key" name="author-key" type="password" autocomplete="current-password" minlength="32" maxlength="256" required>
@@ -21,7 +23,7 @@
       <section id="composer-view" class="composer-view" hidden>
         <form id="editor-form">
           <label class="visually-hidden" for="post-body">Write something</label>
-          <textarea id="post-body" name="post-body" aria-describedby="editor-hint draft-note" placeholder="Write something…" spellcheck="true"></textarea>
+          <textarea id="post-body" name="post-body" maxlength="100000" aria-describedby="editor-hint draft-note" placeholder="Write something…" spellcheck="true"></textarea>
           <div id="attachments" class="attachments" hidden></div>
           <div class="toolbar">
             <button id="photo-button" class="plain-button" type="button">Photo</button>
@@ -31,10 +33,11 @@
         </form>
         <p id="editor-hint" class="editor-note">Use ⌘/Ctrl+Enter to publish. Posts appear on the public timeline.</p>
         <div class="editor-footer">
-          <p id="draft-note" class="editor-note">Draft text stays in this browser only. Images are not saved; clear the draft before sharing this device.</p>
+          <p id="draft-note" class="editor-note">Opening local draft storage…</p>
           <button id="clear-draft-button" class="logout-button clear-draft-button" type="button">Clear draft</button>
         </div>
         <p id="publish-status" class="status" role="status" aria-live="polite"></p>
+        <button id="recover-published-button" class="logout-button" type="button" hidden>Restore last submitted content</button>
         <button id="logout-button" class="logout-button" type="button" hidden>Sign out</button>
       </section>
     </main>

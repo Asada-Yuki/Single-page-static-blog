@@ -1,5 +1,6 @@
+import { ensureEntry, timelineReady } from './timeline.js';
+
 const status = document.querySelector('[data-share-status]');
-const shareButtons = [...document.querySelectorAll('[data-share-url]')];
 const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 let statusTimer;
 
@@ -116,12 +117,15 @@ function entryFromHash() {
   return target?.matches('.entry') ? target : null;
 }
 
-for (const button of shareButtons) {
-  button.hidden = false;
-  button.addEventListener('click', () => shareEntry(button));
+function revealShareButtons() {
+  for (const button of document.querySelectorAll('[data-share-url]')) button.hidden = false;
 }
+revealShareButtons();
+document.addEventListener('timeline:changed', revealShareButtons);
 
-document.addEventListener('click', (event) => {
+document.addEventListener('click', async (event) => {
+  const shareButton = event.target.closest('[data-share-url]');
+  if (shareButton) { await shareEntry(shareButton); return; }
   const closeButton = event.target.closest('[data-share-close]');
   if (closeButton) {
     const fallback = closeButton.closest('[data-share-fallback]');
@@ -135,72 +139,97 @@ document.addEventListener('click', (event) => {
   if (!anchor || event.defaultPrevented || event.button !== 0
     || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
 
-  const target = entryFromAnchor(anchor);
-  if (!target) return;
-
+  let id;
+  try { id = decodeURIComponent(new URL(anchor.href).hash.slice(1)); } catch { return; }
+  if (!id.startsWith('entry-')) return;
   event.preventDefault();
+  saveHistory();
+  const target = await ensureEntry(id);
+  if (!target) return;
   const hash = `#${encodeURIComponent(target.id)}`;
-  if (window.location.hash !== hash) window.history.pushState(null, '', hash);
+  if (window.location.hash !== hash) window.history.pushState({ yukiEntry: target.id }, '', hash);
+  centerTimeline();
   alignEntry(target, reduceMotion.matches ? 'instant' : 'smooth');
+  setTimeout(saveHistory, 500);
 });
 
-function entryFromAnchor(anchor) {
-  let target;
-  try {
-    target = document.getElementById(decodeURIComponent(new URL(anchor.href).hash.slice(1)));
-  } catch {
-    return null;
-  }
-  return target?.matches('.entry') ? target : null;
+function centerTimeline() {
+  const timeline = document.querySelector('.timeline');
+  if (timeline) timeline.dataset.centered = 'true';
 }
 
-const initialEntry = entryFromHash()
-  || document.getElementById(document.body.dataset.initialEntry || '');
+let historyTimer;
+function saveHistory() {
+  if (restoring) return;
+  const entries = [...document.querySelectorAll('.entry')];
+  const anchor = entries.find((entry) => entry.getBoundingClientRect().bottom > 0) || entries[0];
+  history.replaceState({ ...history.state, yukiScroll: window.scrollY,
+    yukiAnchor: anchor?.id, yukiOffset: anchor?.getBoundingClientRect().top }, '');
+}
 
+if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+window.addEventListener('scroll', () => {
+  clearTimeout(historyTimer); historyTimer = setTimeout(saveHistory, 200);
+}, { passive: true });
+let restoring = false;
+let ignoreHash;
+async function restoreHistory(state) {
+  restoring = true;
+  try {
+    let hashId = '';
+    try { hashId = decodeURIComponent(location.hash.slice(1)); } catch { /* Ignore malformed fragments. */ }
+    const id = state?.yukiAnchor || hashId;
+    const target = id ? await ensureEntry(id) : null;
+    if (target && Number.isFinite(state?.yukiOffset)) {
+      centerTimeline();
+      await new Promise(requestAnimationFrame);
+      window.scrollBy({ top: target.getBoundingClientRect().top - state.yukiOffset, behavior: 'instant' });
+    } else if (target) { centerTimeline(); alignEntry(target); }
+    else if (Number.isFinite(state?.yukiScroll)) window.scrollTo({ top: state.yukiScroll, behavior: 'instant' });
+  } finally { restoring = false; saveHistory(); }
+}
+window.addEventListener('popstate', (event) => {
+  ignoreHash = location.hash;
+  clearTimeout(historyTimer);
+  void restoreHistory(event.state);
+});
+window.addEventListener('hashchange', () => {
+  if (ignoreHash === location.hash) { ignoreHash = undefined; return; }
+  if (!restoring) void restoreHistory(null);
+});
+window.addEventListener('pagehide', saveHistory);
+window.addEventListener('pageshow', (event) => { if (event.persisted) void restoreHistory(history.state); });
+
+await timelineReady;
+let initialId;
+try { initialId = decodeURIComponent(location.hash.slice(1)); } catch { /* Invalid fragments are ignored. */ }
+initialId ||= document.body.dataset.initialEntry;
+const initialEntry = initialId ? await ensureEntry(initialId) : null;
 if (initialEntry) {
-  let userInteracted = false;
-  let adjustmentTimer;
-  let correctionFrame;
-  let previousScrollY = window.scrollY;
-  const stopAdjustment = () => {
-    if (userInteracted) return;
-    userInteracted = true;
-    window.clearTimeout(adjustmentTimer);
-    if (correctionFrame) window.cancelAnimationFrame(correctionFrame);
-    observer?.disconnect();
-    window.removeEventListener('resize', correctAfterLayout);
-    window.visualViewport?.removeEventListener('resize', correctAfterLayout);
+  centerTimeline();
+  let stopped = false;
+  let frame;
+  let observer;
+  const stop = () => { stopped = true; observer?.disconnect(); };
+  const correct = () => {
+    if (stopped || frame) return;
+    frame = requestAnimationFrame(() => { frame = null; if (!stopped) { alignEntry(initialEntry); saveHistory(); } });
   };
-  const correctAfterLayout = () => {
-    if (userInteracted || performance.now() >= stopAt || correctionFrame) return;
-    correctionFrame = window.requestAnimationFrame(() => {
-      correctionFrame = 0;
-      const scrollDelta = Math.abs(window.scrollY - previousScrollY);
-      previousScrollY = window.scrollY;
-      if (scrollDelta <= 16) alignEntry(initialEntry);
-    });
-  };
-  const stopAt = performance.now() + 2000;
-  const observer = 'ResizeObserver' in window
-    ? new ResizeObserver(correctAfterLayout)
-    : null;
-
-  observer?.observe(document.querySelector('.timeline') || document.body);
-  window.visualViewport?.addEventListener('resize', correctAfterLayout, { passive: true });
-  window.addEventListener('resize', correctAfterLayout, { passive: true });
-  window.addEventListener('wheel', stopAdjustment, { passive: true, once: true });
-  window.addEventListener('touchstart', stopAdjustment, { passive: true, once: true });
-  window.addEventListener('pointerdown', stopAdjustment, { passive: true, once: true });
+  for (const name of ['wheel', 'touchstart', 'pointerdown']) window.addEventListener(name, stop, { passive: true, once: true });
   window.addEventListener('keydown', (event) => {
-    if (['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp', 'Home', 'End', ' '].includes(event.key)) {
-      stopAdjustment();
-    }
+    if (['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp', 'Home', 'End', ' '].includes(event.key)) stop();
   });
-  adjustmentTimer = window.setTimeout(stopAdjustment, 2000);
-
-  window.requestAnimationFrame(() => {
-    alignEntry(initialEntry);
-    previousScrollY = window.scrollY;
-  });
-  document.fonts?.ready.then(correctAfterLayout);
+  observer = new ResizeObserver(correct);
+  observer.observe(initialEntry);
+  document.fonts?.ready.then(correct);
+  correct();
+  const images = [...initialEntry.querySelectorAll('img')];
+  await Promise.all(images.map((image) => image.complete ? Promise.resolve() : new Promise((resolve) => {
+    image.addEventListener('load', resolve, { once: true }); image.addEventListener('error', resolve, { once: true });
+  })));
+  correct();
+  setTimeout(stop, 1200);
+} else {
+  if (Number.isFinite(history.state?.yukiScroll)) await restoreHistory(history.state);
+  else saveHistory();
 }

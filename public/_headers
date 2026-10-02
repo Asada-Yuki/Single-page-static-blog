@@ -1,6 +1,20 @@
 /*
-  Content-Security-Policy: default-src 'none'; img-src 'self'; style-src 'self'; script-src 'self' https://static.cloudflareinsights.com; connect-src 'self'; frame-src https://www.youtube-nocookie.com https://player.vimeo.com https://player.bilibili.com; base-uri 'none'; form-action 'none'; object-src 'none'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'none'; img-src 'self'; style-src 'self'; script-src 'self' https://static.cloudflareinsights.com; connect-src 'self' https://cloudflareinsights.com; frame-src https://www.youtube-nocookie.com https://player.vimeo.com https://player.bilibili.com; base-uri 'none'; form-action 'none'; object-src 'none'; frame-ancestors 'none'
   Referrer-Policy: strict-origin-when-cross-origin
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY
   Permissions-Policy: camera=(), microphone=(), geolocation=()
+  Strict-Transport-Security: max-age=86400
+  Cache-Control: no-transform
+
+/*.js
+  Cache-Control: no-cache
+
+/timeline/*
+  Cache-Control: public, max-age=31536000, immutable
+
+https://single-page-static-blog.pages.dev/*
+  X-Robots-Tag: noindex
+
+https://:preview.single-page-static-blog.pages.dev/*
+  X-Robots-Tag: noindex

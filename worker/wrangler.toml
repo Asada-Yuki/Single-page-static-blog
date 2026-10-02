@@ -1,5 +1,5 @@
 name = "single-timeline-blog-publisher"
-main = "src/index.js"
+main = "src/entry.js"
 compatibility_date = "2026-09-27"
 workers_dev = true
 
@@ -19,10 +19,36 @@ zone_name = "yuki.art"
 pattern = "yuki.art/api/*"
 zone_name = "yuki.art"
 
+[[routes]]
+pattern = "yuki.art/writer-protocol.js"
+zone_name = "yuki.art"
+
+[[routes]]
+pattern = "www.yuki.art/writer-protocol.js"
+zone_name = "yuki.art"
+
 [vars]
 GITHUB_OWNER = "Asada-Yuki"
 GITHUB_REPO = "Single-page-static-blog"
 GITHUB_BRANCH = "main"
+SITE_ORIGIN = "https://yuki.art"
+SESSION_DAYS = "30"
+
+[[durable_objects.bindings]]
+name = "SESSIONS"
+class_name = "SessionStore"
+
+[[migrations]]
+tag = "v1-session-store"
+new_sqlite_classes = ["SessionStore"]
+
+[[ratelimits]]
+name = "AUTHOR_PUBLISH_LIMITER"
+namespace_id = "917203642"
+
+  [ratelimits.simple]
+  limit = 10
+  period = 60
 
 [[ratelimits]]
 name = "AUTHOR_LOGIN_LIMITER"
