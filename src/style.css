@@ -56,7 +56,7 @@ body {
   min-height: 100svh;
   flex-direction: column;
   margin: 0 auto;
-  padding: 52px 0 80px;
+  padding: 40px 0 80px;
 }
 
 .timeline {
@@ -66,8 +66,7 @@ body {
 
 .timeline[data-centered="true"],
 .shared-page .timeline {
-  padding-block: 50vh;
-  padding-block: 50svh;
+  padding-block: max(0px, calc(50svh - 225px)) 50svh;
 }
 
 .timeline-edge { height: 1px; }
@@ -217,8 +216,16 @@ body {
 }
 
 .site-header {
-  position: relative;
-  margin: 0 0 68px;
+  position: sticky;
+  z-index: 12;
+  top: env(safe-area-inset-top, 0px);
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 0 44px;
+  background: var(--paper);
 }
 
 .site-logo {
@@ -232,13 +239,13 @@ body {
 }
 
 .theme-toggle {
-  position: absolute;
-  top: -12px;
-  right: -8px;
+  position: static;
   display: grid;
   width: 44px;
   height: 44px;
+  flex: 0 0 44px;
   place-items: center;
+  margin-right: -8px;
   padding: 0;
   border: 1px solid transparent;
   border-radius: 50%;
@@ -784,7 +791,7 @@ body {
 
   .timeline-shell {
     width: calc(100% - 36px);
-    padding-top: 34px;
+    padding-top: 22px;
     padding-bottom: 112px;
   }
 
@@ -868,7 +875,7 @@ body {
   }
 
   .site-header {
-    margin-bottom: 54px;
+    margin-bottom: 36px;
   }
 
   .site-footer {
