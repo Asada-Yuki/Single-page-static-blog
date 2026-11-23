@@ -24,12 +24,15 @@
 
 ```sh
 npm ci
+npm audit --audit-level=moderate
 npm run build
 npm test
 npm run test:browser
 ```
 
 本地与 CI 使用 `.nvmrc` 中的 Node 22 LTS 补丁版本。浏览器测试在本机使用隔离的 Chrome，在 CI 使用 Chromium；XML 校验需要 Python 3。
+
+2026-11-23 安全更新将 `markdown-it` 升至 `15.0.3`，将 `wrangler` 升至 `4.166.0`，并更新锁文件中的 Miniflare、Sharp 和 Undici 依赖。
 
 `npm run build` 会先同步 Worker 写作页资源，再构建静态站点。`npm test` 会检查构建输出、Worker 资源与登录限速、会话和发布流程。构建输出在 `dist/`。本地预览：
 
